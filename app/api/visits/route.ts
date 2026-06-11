@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUserId } from "@/lib/auth";
-import { findNearestCityId } from "@/lib/geo";
+import { adoptOrphanPlaces, findNearestCityId } from "@/lib/geo";
 import { toVisitDto, visitInclude } from "@/lib/visits";
 import { fieldErrors, visitCreateSchema } from "@/lib/validation";
 
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   const parentId =
     type === "PLACE" ? await findNearestCityId(userId, lat, lng) : null;
 
-  const visit = await prisma.visit.create({
+  let visit = await prisma.visit.create({
     data: {
       userId,
       type,
@@ -60,6 +60,19 @@ export async function POST(req: Request) {
     },
     include: visitInclude,
   });
+
+  // A city created after its places (pin-by-label flow) adopts the user's
+  // orphan places nearby; re-read so placeCount reflects the adoption.
+  if (type === "CITY") {
+    const adopted = await adoptOrphanPlaces(userId, visit.id, lat, lng);
+    if (adopted > 0) {
+      visit =
+        (await prisma.visit.findUnique({
+          where: { id: visit.id },
+          include: visitInclude,
+        })) ?? visit;
+    }
+  }
 
   return NextResponse.json({ visit: toVisitDto(visit) }, { status: 201 });
 }

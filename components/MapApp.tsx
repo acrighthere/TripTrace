@@ -20,6 +20,16 @@ interface MapAppProps {
   userEmail: string;
 }
 
+function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLng = (bLng - aLng) * rad;
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
 function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const toast = useToast();
 
@@ -63,10 +73,30 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
     [visits, requestFly]
   );
 
-  const handleMapClick = useCallback((pin: DraftPin) => {
-    setSelectedId(null);
-    setDraft(pin);
-  }, []);
+  const handleMapClick = useCallback(
+    (pin: DraftPin) => {
+      // Clicking a basemap label that's already pinned selects the existing
+      // visit instead of drafting a duplicate.
+      if (pin.suggestedName) {
+        const norm = pin.suggestedName.trim().toLowerCase();
+        const existing = (visits ?? []).find(
+          (v) =>
+            v.type === pin.suggestedType &&
+            v.name.trim().toLowerCase() === norm &&
+            distanceKm(v.lat, v.lng, pin.lat, pin.lng) < 30
+        );
+        if (existing) {
+          setDraft(null);
+          setSelectedId(existing.id);
+          toast("Already pinned");
+          return;
+        }
+      }
+      setSelectedId(null);
+      setDraft(pin);
+    },
+    [visits, toast]
+  );
 
   const closePanels = useCallback(() => {
     setSelectedId(null);
@@ -110,6 +140,9 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         setVisits((v) => (v ?? []).map((x) => (x.id === tempId ? data.visit : x)));
         setSelectedId(data.visit.id);
         toast("Saved");
+        // A new city may have adopted existing orphan places server-side;
+        // refetch so their parent links show up.
+        if (data.visit.type === "CITY" && data.visit.placeCount > 0) void load();
         return true;
       } catch {
         setVisits((v) => (v ?? []).filter((x) => x.id !== tempId));
@@ -118,7 +151,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         return false;
       }
     },
-    [toast]
+    [toast, load]
   );
 
   const updateVisit = useCallback(

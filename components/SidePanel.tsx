@@ -134,13 +134,21 @@ export default function SidePanel({
       <div className="p-4">
         <h2 className="text-lg font-semibold">Add visit</h2>
         <p className="mt-0.5 text-xs text-slate-400">
-          Pinned at {draft.lat.toFixed(4)}, {draft.lng.toFixed(4)}
+          {draft.suggestedName
+            ? `“${draft.suggestedName}” from the map label — adjust anything before saving.`
+            : `Pinned at ${draft.lat.toFixed(4)}, ${draft.lng.toFixed(4)}`}
         </p>
         <div className="mt-4">
           <VisitForm
+            key={`${draft.lat}:${draft.lng}:${draft.suggestedName ?? ""}`}
             mode="create"
             typeEditable
-            initial={{ name: "", type: draft.suggestedType, notes: "", visitedAt: "" }}
+            initial={{
+              name: draft.suggestedName ?? "",
+              type: draft.suggestedType,
+              notes: "",
+              visitedAt: "",
+            }}
             onSubmit={(values) => onCreate(draft, values)}
             onCancel={onClose}
           />

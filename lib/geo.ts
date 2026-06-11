@@ -28,3 +28,29 @@ export async function findNearestCityId(
   `;
   return rows[0]?.id ?? null;
 }
+
+/**
+ * When a city is created after its places (e.g. pinned from a map label),
+ * attach the user's orphan places within the radius to it. Returns the
+ * number of adopted places.
+ */
+export async function adoptOrphanPlaces(
+  userId: string,
+  cityId: string,
+  lat: number,
+  lng: number
+): Promise<number> {
+  return prisma.$executeRaw`
+    UPDATE "Visit"
+    SET "parentId" = ${cityId}
+    WHERE "userId" = ${userId}
+      AND "type" = 'PLACE'::"VisitType"
+      AND "parentId" IS NULL
+      AND "geom" IS NOT NULL
+      AND ST_DWithin(
+            "geom",
+            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
+            ${PARENT_RADIUS_METERS}
+          )
+  `;
+}

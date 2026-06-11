@@ -26,9 +26,11 @@ export interface PhotoDto {
   url: string;
 }
 
-/** Payload the map produces when the user clicks an empty spot. */
+/** Payload the map produces when the user clicks an empty spot or a basemap label. */
 export interface DraftPin {
   lat: number;
   lng: number;
   suggestedType: VisitType;
+  /** Prefilled from a clicked basemap label (city name / POI name), if any. */
+  suggestedName?: string;
 }

@@ -52,9 +52,65 @@ function toFeatureCollection(visits: VisitDto[], type: VisitType): GeoJSON.Featu
 const INTERACTIVE_LAYERS = [
   "places-clusters",
   "places-point",
+  "places-label",
   "cities-clusters",
   "cities-point",
+  "cities-label",
 ];
+
+// Our own GeoJSON sources — basemap label hit-testing must skip these.
+const APP_SOURCES = new Set(["cities", "places", "selected"]);
+
+// OpenMapTiles `place` classes that count as a pinnable city. Country/state/
+// region labels deliberately fall through to the plain click behavior.
+const SETTLEMENT_CLASSES = new Set(["city", "town", "village"]);
+
+interface LabelHit {
+  name: string;
+  lat: number;
+  lng: number;
+  kind: VisitType;
+}
+
+/**
+ * Hit-test the basemap's rendered labels around a click point. City/town/
+ * village labels suggest a CITY pin, POI labels a PLACE pin — both carry the
+ * label's name and anchor coordinates so the form comes prefilled.
+ */
+function findLabelHit(map: MapLibreMap, point: { x: number; y: number }): LabelHit | null {
+  let features: ReturnType<MapLibreMap["queryRenderedFeatures"]>;
+  try {
+    features = map.queryRenderedFeatures([
+      [point.x - 8, point.y - 8],
+      [point.x + 8, point.y + 8],
+    ]);
+  } catch {
+    return null;
+  }
+
+  for (const f of features) {
+    if (f.layer.type !== "symbol") continue;
+    if (APP_SOURCES.has(f.source)) continue;
+    if (f.geometry.type !== "Point") continue;
+
+    const props = f.properties ?? {};
+    // Prefer the name the style most likely rendered (English), then the
+    // latin transliteration, then the local name.
+    const name = [props.name_en, props["name:en"], props["name:latin"], props.name].find(
+      (n): n is string => typeof n === "string" && n.trim().length > 0
+    );
+    if (!name) continue;
+
+    const [lng, lat] = f.geometry.coordinates as [number, number];
+    if (f.sourceLayer === "place" && SETTLEMENT_CLASSES.has(String(props.class))) {
+      return { name: name.trim(), lat, lng, kind: "CITY" };
+    }
+    if (f.sourceLayer === "poi") {
+      return { name: name.trim(), lat, lng, kind: "PLACE" };
+    }
+  }
+  return null;
+}
 
 export default function MapView({
   styleUrl,
@@ -252,6 +308,19 @@ export default function MapView({
       const feature = features[0];
 
       if (!feature) {
+        // A click on a basemap label (city name, POI) pins that label —
+        // name and coordinates come from the label itself.
+        const labelHit = findLabelHit(map, e.point);
+        if (labelHit) {
+          onMapClickRef.current({
+            lat: labelHit.lat,
+            lng: labelHit.lng,
+            suggestedType: labelHit.kind,
+            suggestedName: labelHit.name,
+          });
+          return;
+        }
+
         const zoom = map.getZoom();
         onMapClickRef.current({
           lat: e.lngLat.lat,
@@ -280,7 +349,8 @@ export default function MapView({
       const layers = INTERACTIVE_LAYERS.filter((l) => map.getLayer(l));
       if (!layers.length) return;
       const features = map.queryRenderedFeatures(e.point, { layers });
-      map.getCanvas().style.cursor = features.length ? "pointer" : "";
+      const clickable = features.length > 0 || findLabelHit(map, e.point) !== null;
+      map.getCanvas().style.cursor = clickable ? "pointer" : "";
     });
 
     return () => {
