@@ -70,6 +70,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-triptrace}
       S3_REGION: ${S3_REGION:-us-east-1}
       MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
     ports:
       - "3000:3000"
     restart: unless-stopped

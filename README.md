@@ -35,8 +35,25 @@ inside compose, the app container gets `db`/`minio` hostnames injected.)
 
 - **Geo:** Prisma can't model PostGIS types, so `Visit` carries `lat`/`lng`
   floats for the app plus a `geography(Point,4326)` column (`geom`) kept in sync
-  by a database trigger, GIST-indexed. Place→city attachment uses
-  `ST_DWithin` (50 km) + nearest-neighbor ordering, always scoped to the owner.
+  by a database trigger, GIST-indexed.
+- **Place→city attachment:** when a CITY is pinned, its administrative
+  boundary polygon is fetched once from Nominatim (`NOMINATIM_URL`, throttled
+  to 1 req/s with a proper User-Agent per the
+  [public-instance policy](https://operations.osmfoundation.org/policies/nominatim/),
+  result cached on the row as `geography(MultiPolygon)`). A place attaches to
+  the **smallest stored boundary covering it** — which resolves enclaves
+  correctly: a pin at St. Peter's attaches to Vatican City, not Rome, because
+  Rome's polygon has a hole there. When no boundary covers the point (or the
+  lookup failed — county-level results, plain place nodes, oceans, timeouts
+  are all rejected), it falls back to nearest city center within 50 km, the
+  original heuristic. Only CITY pin coordinates are ever sent to the
+  geocoder; place pins never leave the box. New cities adopt existing places
+  their boundary covers (conservatively — never stealing from a parent whose
+  boundary legitimately covers the place), and the UI reports how many were
+  attached. For a fully offline/at-scale variant, import
+  [Overture divisions](https://docs.overturemaps.org/guides/divisions/)
+  polygons into the same PostGIS and replace the fetch — the queries stay
+  identical.
 - **Sessions:** Auth.js Credentials can't use database sessions, so sessions are
   JWTs in an httpOnly/secure/sameSite=lax cookie (30-day expiry, rolling
   refresh). The Prisma adapter and adapter tables are wired for future OAuth.

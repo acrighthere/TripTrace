@@ -136,13 +136,18 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { visit: VisitDto };
+        const data = (await res.json()) as { visit: VisitDto; adoptedPlaces?: number };
         setVisits((v) => (v ?? []).map((x) => (x.id === tempId ? data.visit : x)));
         setSelectedId(data.visit.id);
-        toast("Saved");
-        // A new city may have adopted existing orphan places server-side;
-        // refetch so their parent links show up.
-        if (data.visit.type === "CITY" && data.visit.placeCount > 0) void load();
+        // Attachment must never happen silently — say how many places moved,
+        // and resync since other visits' parent links changed server-side.
+        const adopted = data.adoptedPlaces ?? 0;
+        if (adopted > 0) {
+          toast(`Saved — ${adopted} place${adopted === 1 ? "" : "s"} attached`);
+          void load();
+        } else {
+          toast("Saved");
+        }
         return true;
       } catch {
         setVisits((v) => (v ?? []).filter((x) => x.id !== tempId));

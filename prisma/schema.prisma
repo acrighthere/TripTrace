@@ -81,6 +81,10 @@ model Visit {
   // migration); GIST-indexed there too. Declared so migrate dev won't drop it.
   geom Unsupported("geography(Point, 4326)")?
 
+  // CITY rows only: admin boundary polygon from Nominatim (see the
+  // city_boundary migration). Declared so migrate dev won't drop it.
+  boundary Unsupported("geography(MultiPolygon, 4326)")?
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Prisma forbids Cascade on self-relations; child places are deleted
   // in app code (required anyway to clean up their photos' MinIO objects).
