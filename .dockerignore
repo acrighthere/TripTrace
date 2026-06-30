@@ -7,9 +7,11 @@ build
 .env
 .env*.local
 .env.example
+.env.prod.example
 *.md
 .DS_Store
-docker-compose.yml
+docker-compose*.yml
+deploy
 Dockerfile
 .dockerignore
 npm-debug.log*

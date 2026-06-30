@@ -1,0 +1,20 @@
+# Caddy reverse proxy for the domain + HTTPS deployment
+# (docker-compose.tls.yml). Replace the two hostnames below with your real
+# ones, point their DNS A-records at the VM, then bring the stack up — Caddy
+# fetches and renews Let's Encrypt certificates automatically.
+#
+# The app and the S3/MinIO API need SEPARATE hostnames because presigned photo
+# URLs are signed for the S3 host: set S3_PUBLIC_ENDPOINT in .env to the https
+# URL of the s3 host below, and NEXTAUTH_URL to the https URL of the app host.
+
+triptrace.example.com {
+	reverse_proxy app:3000
+}
+
+s3.triptrace.example.com {
+	# Large request bodies for photo uploads.
+	request_body {
+		max_size 16MB
+	}
+	reverse_proxy minio:9000
+}

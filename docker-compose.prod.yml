@@ -1,0 +1,96 @@
+name: triptrace
+
+# Production stack for a single VM reached by its external IP over HTTP.
+# Use it standalone (NOT layered on docker-compose.yml):
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from the dev docker-compose.yml:
+#   - MinIO's S3 API (9000) is published on 0.0.0.0 so visitors' browsers can
+#     reach presigned photo URLs; the MinIO console (9001) and Postgres (5432)
+#     stay bound to loopback and are reachable only via an SSH tunnel.
+#   - MinIO CORS is set explicitly so cross-origin (app :3000 -> MinIO :9000)
+#     browser uploads work regardless of the image's default.
+#   - db/minio/app all restart unless-stopped, so the stack survives a reboot.
+#
+# All secrets and public URLs come from .env — copy .env.prod.example and fill
+# it in. The critical ones for a server are NEXTAUTH_URL and S3_PUBLIC_ENDPOINT:
+# both must use the VM's external IP, not localhost.
+
+services:
+  db:
+    image: docker.io/postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-triptrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-triptrace}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432" # loopback only — never exposed to the internet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-triptrace} -d ${POSTGRES_DB:-triptrace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: docker.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+      # Browsers upload cross-origin (app origin -> this host); allow it.
+      # Tighten to your exact app origin via MINIO_CORS_ALLOW_ORIGIN if you like.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ALLOW_ORIGIN:-*}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"           # S3 API — PUBLIC: browsers hit presigned URLs here
+      - "127.0.0.1:9001:9001" # console — loopback only (reach via SSH tunnel)
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: docker.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
+      mc mb -p local/'${S3_BUCKET:-triptrace}'
+      "
+
+  app:
+    build:
+      context: .
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-triptrace}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-triptrace}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET in .env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?set NEXTAUTH_URL to http://<IP>:3000}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?set S3_PUBLIC_ENDPOINT to http://<IP>:9000}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-triptrace}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  minio-data:

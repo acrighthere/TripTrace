@@ -1,0 +1,103 @@
+name: triptrace
+
+# Production stack with a domain + automatic HTTPS via Caddy + Let's Encrypt.
+# Use it when you have DNS records pointing at the VM. Standalone:
+#
+#   docker compose -f docker-compose.tls.yml up -d --build
+#
+# Prerequisites:
+#   - A-records for your app host and S3 host point at this VM (e.g.
+#     triptrace.example.com and s3.triptrace.example.com).
+#   - Ports 80 and 443 open in the firewall AND the cloud security group.
+#   - deploy/Caddyfile edited with those two real hostnames.
+#   - In .env: NEXTAUTH_URL=https://triptrace.example.com and
+#     S3_PUBLIC_ENDPOINT=https://s3.triptrace.example.com
+#
+# Only Caddy is published to the internet; app/minio/db are internal and Caddy
+# reaches them over the compose network. The named volumes are shared with
+# docker-compose.prod.yml (same project name), so switching keeps your data.
+
+services:
+  db:
+    image: docker.io/postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-triptrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-triptrace}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-triptrace} -d ${POSTGRES_DB:-triptrace}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: docker.io/minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ALLOW_ORIGIN:-*}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: docker.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 '${S3_ACCESS_KEY}' '${S3_SECRET_KEY}' &&
+      mc mb -p local/'${S3_BUCKET:-triptrace}'
+      "
+
+  app:
+    build:
+      context: .
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-triptrace}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-triptrace}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET in .env}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:?set NEXTAUTH_URL to your https app URL}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:?set S3_PUBLIC_ENDPOINT to your https S3 URL}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-triptrace}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      MAP_STYLE_URL: ${MAP_STYLE_URL:-https://tiles.openfreemap.org/styles/liberty}
+      NOMINATIM_URL: ${NOMINATIM_URL:-https://nominatim.openstreetmap.org}
+    restart: unless-stopped
+
+  caddy:
+    image: docker.io/library/caddy:2-alpine
+    depends_on:
+      - app
+      - minio
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  minio-data:
+  caddy-data:
+  caddy-config:

@@ -85,6 +85,50 @@ Inject secrets through the platform's env mechanism — nothing is baked into th
 image (`.env` is dockerignored). If the platform's disk is ephemeral, the
 in-compose `db`/`minio` services are not safe to use; switch both as above.
 
+## Deploy to a VM with an external IP
+
+`docker-compose.prod.yml` is a self-contained production stack (publishes the
+MinIO S3 port so browsers can reach photo URLs, keeps Postgres/console on
+loopback, sets restart policies and MinIO CORS). Login works over plain HTTP by
+IP because Auth.js derives the cookie `secure` flag from `NEXTAUTH_URL`'s scheme.
+
+**1 — On the VM:** install Docker (or Podman) + Compose, then open ports `22`,
+`3000`, `9000` in **both** the OS firewall and the cloud security group.
+
+**2 — Get the code and configure:**
+```sh
+git clone https://github.com/acrighthere/TripTrace.git && cd TripTrace
+cp .env.prod.example .env
+# edit .env: set NEXTAUTH_SECRET (openssl rand -base64 32), strong
+# POSTGRES_PASSWORD / S3_ACCESS_KEY / S3_SECRET_KEY, and put the VM's external
+# IP in NEXTAUTH_URL (http://<IP>:3000) and S3_PUBLIC_ENDPOINT (http://<IP>:9000)
+```
+
+**3 — Launch** (migrations run automatically on boot):
+```sh
+docker compose -f docker-compose.prod.yml up -d --build
+```
+Open `http://<IP>:3000`. The build needs ~2 GB RAM — on a smaller VM add swap or
+build the image elsewhere and push it to a registry.
+
+> ⚠️ Over plain HTTP, passwords and session cookies travel in clear text — fine
+> for a personal instance on a trusted network, not for the public internet.
+> The MinIO console (`9001`) and Postgres (`5432`) stay on loopback; reach the
+> console with `ssh -L 9001:localhost:9001 user@<IP>`.
+
+### Adding a domain + HTTPS later
+
+`docker-compose.tls.yml` + `deploy/Caddyfile` add a Caddy reverse proxy with
+automatic Let's Encrypt certs. When your domain is ready:
+
+1. Point A-records for an app host and an S3 host (e.g. `triptrace.example.com`
+   and `s3.triptrace.example.com`) at the VM; open ports `80`/`443`.
+2. Put those two hostnames in `deploy/Caddyfile`.
+3. In `.env`, switch `NEXTAUTH_URL=https://triptrace.example.com` and
+   `S3_PUBLIC_ENDPOINT=https://s3.triptrace.example.com`.
+4. `docker compose -f docker-compose.tls.yml up -d --build` (it reuses the same
+   data volumes; only Caddy is exposed — close `3000`/`9000` afterwards).
+
 ## Required env vars
 
 See [.env.example](.env.example): `DATABASE_URL`, `NEXTAUTH_SECRET`,
