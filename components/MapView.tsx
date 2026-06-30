@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { DraftPin, VisitDto, VisitType } from "@/types";
+import type { DraftPin, TripDto, VisitDto, VisitType } from "@/types";
 
 /** Clicks below this zoom create cities; at or above it, places. */
 export const PLACE_MIN_ZOOM = 10;
@@ -19,6 +19,7 @@ export interface FlyToTarget {
 interface MapViewProps {
   styleUrl: string;
   visits: VisitDto[];
+  trips: TripDto[];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -44,9 +45,40 @@ function toFeatureCollection(visits: VisitDto[], type: VisitType): GeoJSON.Featu
       .map((v) => ({
         type: "Feature" as const,
         geometry: { type: "Point" as const, coordinates: [v.lng, v.lat] },
-        properties: { id: v.id, name: v.name },
+        properties: { id: v.id, name: v.name, status: v.status },
       })),
   };
+}
+
+/** Chronological order for drawing a trip's route through its stops. */
+function visitOrder(a: VisitDto, b: VisitDto): number {
+  const ka = a.visitedAt ?? a.createdAt;
+  const kb = b.visitedAt ?? b.createdAt;
+  return ka < kb ? -1 : ka > kb ? 1 : a.createdAt < b.createdAt ? -1 : 1;
+}
+
+/** One LineString per trip with ≥2 stops, ordered chronologically, colored. */
+function toTripLines(visits: VisitDto[], trips: TripDto[]): GeoJSON.FeatureCollection {
+  const colorById = new Map(trips.map((t) => [t.id, t.color]));
+  const byTrip = new Map<string, VisitDto[]>();
+  for (const v of visits) {
+    if (!v.tripId) continue;
+    const list = byTrip.get(v.tripId);
+    if (list) list.push(v);
+    else byTrip.set(v.tripId, [v]);
+  }
+
+  const features: GeoJSON.Feature[] = [];
+  for (const [tripId, group] of byTrip) {
+    if (group.length < 2) continue;
+    const sorted = [...group].sort(visitOrder);
+    features.push({
+      type: "Feature",
+      geometry: { type: "LineString", coordinates: sorted.map((v) => [v.lng, v.lat]) },
+      properties: { color: colorById.get(tripId) ?? "#2563eb" },
+    });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 const INTERACTIVE_LAYERS = [
@@ -115,6 +147,7 @@ function findLabelHit(map: MapLibreMap, point: { x: number; y: number }): LabelH
 export default function MapView({
   styleUrl,
   visits,
+  trips,
   loading,
   error,
   onRetry,
@@ -132,6 +165,8 @@ export default function MapView({
   // Latest props for the stable map event handlers.
   const visitsRef = useRef(visits);
   visitsRef.current = visits;
+  const tripsRef = useRef(trips);
+  tripsRef.current = trips;
   const onSelectRef = useRef(onSelectVisit);
   onSelectRef.current = onSelectVisit;
   const onMapClickRef = useRef(onMapClick);
@@ -166,6 +201,24 @@ export default function MapView({
         clusterRadius: 40,
       });
       map.addSource("selected", { type: "geojson", data: EMPTY_FC });
+      map.addSource("trips", {
+        type: "geojson",
+        data: toTripLines(visitsRef.current, tripsRef.current),
+      });
+
+      // Trip routes sit beneath every marker so pins stay clickable.
+      map.addLayer({
+        id: "trip-lines",
+        type: "line",
+        source: "trips",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 2.5,
+          "line-opacity": 0.75,
+          "line-dasharray": [2, 1.5],
+        },
+      });
 
       // Halo under the selected marker.
       map.addLayer({
@@ -215,9 +268,10 @@ export default function MapView({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": 6.5,
-          "circle-color": PLACE_COLOR,
+          // Wishlist pins read as a hollow ring; visited ones are solid.
+          "circle-color": ["case", ["==", ["get", "status"], "WISHLIST"], "#ffffff", PLACE_COLOR],
           "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
+          "circle-stroke-color": ["case", ["==", ["get", "status"], "WISHLIST"], PLACE_COLOR, "#ffffff"],
         },
       });
       map.addLayer({
@@ -272,9 +326,10 @@ export default function MapView({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": 8.5,
-          "circle-color": CITY_COLOR,
+          // Wishlist pins read as a hollow ring; visited ones are solid.
+          "circle-color": ["case", ["==", ["get", "status"], "WISHLIST"], "#ffffff", CITY_COLOR],
           "circle-stroke-width": 2,
-          "circle-stroke-color": "#ffffff",
+          "circle-stroke-color": ["case", ["==", ["get", "status"], "WISHLIST"], CITY_COLOR, "#ffffff"],
         },
       });
       map.addLayer({
@@ -372,7 +427,8 @@ export default function MapView({
     (map.getSource("places") as GeoJSONSource | undefined)?.setData(
       toFeatureCollection(visits, "PLACE")
     );
-  }, [visits, styleLoaded]);
+    (map.getSource("trips") as GeoJSONSource | undefined)?.setData(toTripLines(visits, trips));
+  }, [visits, trips, styleLoaded]);
 
   // Highlight ring under the selected visit.
   useEffect(() => {

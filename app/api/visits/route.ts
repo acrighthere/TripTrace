@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireUserId } from "@/lib/auth";
-import { fetchCityBoundary } from "@/lib/boundaries";
+import { lookupCity, type CityLookup } from "@/lib/boundaries";
 import {
   adoptOrphanPlaces,
   findParentCityId,
@@ -56,33 +56,57 @@ export async function POST(req: Request) {
     );
   }
 
-  const { name, type, lat, lng, notes, visitedAt } = parsed.data;
+  const { name, type, status, lat, lng, notes, visitedAt, visitedTo } = parsed.data;
 
   // Containment against stored city boundaries, radius fallback otherwise.
   const parentId =
     type === "PLACE" ? await findParentCityId(userId, lat, lng) : null;
 
+  // A city resolves its country (and boundary) from one Nominatim lookup; a
+  // place inherits its country from the parent city — no extra lookup, and
+  // never sends place coordinates to the geocoder.
+  let lookup: CityLookup | null = null;
+  let country: string | null = null;
+  let countryCode: string | null = null;
+  let continent: string | null = null;
+  if (type === "CITY") {
+    lookup = await lookupCity(lat, lng);
+    ({ country, countryCode, continent } = lookup);
+  } else if (parentId) {
+    const parent = await prisma.visit.findUnique({
+      where: { id: parentId },
+      select: { country: true, countryCode: true, continent: true },
+    });
+    country = parent?.country ?? null;
+    countryCode = parent?.countryCode ?? null;
+    continent = parent?.continent ?? null;
+  }
+
   let visit = await prisma.visit.create({
     data: {
       userId,
       type,
+      status: status ?? "VISITED",
       name,
       lat,
       lng,
       parentId,
       notes: notes ?? null,
       visitedAt: visitedAt ?? null,
+      visitedTo: visitedTo ?? null,
+      country,
+      countryCode,
+      continent,
     },
     include: visitInclude,
   });
 
-  // New cities fetch their admin boundary (best-effort; the optimistic UI
-  // hides this latency) and take in the places that belong to them.
+  // A new city stores its boundary (best-effort) and takes in the places that
+  // belong to it.
   let adoptedPlaces = 0;
   if (type === "CITY") {
-    const boundary = await fetchCityBoundary(lat, lng);
-    const stored = boundary
-      ? await setCityBoundary(userId, visit.id, boundary.geojson, boundary.maxAreaKm2)
+    const stored = lookup?.boundary
+      ? await setCityBoundary(userId, visit.id, lookup.boundary.geojson, lookup.boundary.maxAreaKm2)
       : false;
 
     adoptedPlaces = stored

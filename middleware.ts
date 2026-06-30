@@ -19,5 +19,11 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/map/:path*", "/api/visits/:path*", "/api/photos/:path*"],
+  matcher: [
+    "/map/:path*",
+    "/api/visits/:path*",
+    "/api/photos/:path*",
+    "/api/stats/:path*",
+    "/api/trips/:path*",
+  ],
 };

@@ -2,22 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
-import type { DraftPin, VisitDto } from "@/types";
+import type { DraftPin, TripDto, VisitDto, VisitStatus } from "@/types";
 import VisitForm from "@/components/VisitForm";
 import PhotoSection from "@/components/PhotoSection";
-import type { VisitFormValues } from "@/components/MapApp";
+import StatsPanel from "@/components/StatsPanel";
+import TripDetail from "@/components/TripDetail";
+import type { VisitEditValues, VisitFormValues } from "@/components/MapApp";
 
 interface SidePanelProps {
   userEmail: string;
   visits: VisitDto[];
+  trips: TripDto[];
   loading: boolean;
   selectedId: string | null;
   draft: DraftPin | null;
   onSelect: (id: string) => void;
   onClose: () => void;
   onCreate: (pin: DraftPin, values: VisitFormValues) => Promise<boolean>;
-  onUpdate: (id: string, values: Omit<VisitFormValues, "type">) => Promise<boolean>;
+  onUpdate: (id: string, values: VisitEditValues) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
+  onSetStatus: (id: string, status: VisitStatus) => void;
+  onSetTrip: (id: string, tripId: string | null) => void;
+  onCreateTrip: (name: string) => Promise<string | null>;
+  onRenameTrip: (id: string, name: string) => Promise<boolean>;
+  onDeleteTrip: (id: string) => Promise<boolean>;
   onPhotoCountChange: (visitId: string, delta: number) => void;
 }
 
@@ -28,6 +36,14 @@ function formatDate(iso: string | null): string | null {
     month: "short",
     day: "numeric",
   });
+}
+
+/** "12 Mar 2025" or "12–15 Mar 2025"-style range when an end date is set. */
+function formatDateRange(from: string | null, to: string | null): string | null {
+  const f = formatDate(from);
+  if (!f) return null;
+  const t = formatDate(to);
+  return t && t !== f ? `${f} – ${t}` : f;
 }
 
 function TypeBadge({ type }: { type: VisitDto["type"] }) {
@@ -45,6 +61,7 @@ function TypeBadge({ type }: { type: VisitDto["type"] }) {
 export default function SidePanel({
   userEmail,
   visits,
+  trips,
   loading,
   selectedId,
   draft,
@@ -53,19 +70,44 @@ export default function SidePanel({
   onCreate,
   onUpdate,
   onDelete,
+  onSetStatus,
+  onSetTrip,
+  onCreateTrip,
+  onRenameTrip,
+  onDeleteTrip,
   onPhotoCountChange,
 }: SidePanelProps) {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [tripViewId, setTripViewId] = useState<string | null>(null);
+  const [newTripName, setNewTripName] = useState("");
 
   const selected = selectedId ? visits.find((v) => v.id === selectedId) ?? null : null;
+  const tripView = tripViewId ? trips.find((t) => t.id === tripViewId) ?? null : null;
 
   useEffect(() => {
     setEditing(false);
     setConfirmingDelete(false);
+    if (selectedId) {
+      setShowStats(false);
+      setTripViewId(null);
+    }
   }, [selectedId]);
+
+  // Member visits per trip, for counts and the trip detail view.
+  const visitsByTrip = useMemo(() => {
+    const map = new Map<string, VisitDto[]>();
+    for (const v of visits) {
+      if (!v.tripId) continue;
+      const list = map.get(v.tripId);
+      if (list) list.push(v);
+      else map.set(v.tripId, [v]);
+    }
+    return map;
+  }, [visits]);
 
   const cities = useMemo(
     () =>
@@ -109,16 +151,21 @@ export default function SidePanel({
     "flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-sky-500";
 
   function VisitRow({ visit, indent }: { visit: VisitDto; indent?: boolean }) {
+    const wishlist = visit.status === "WISHLIST";
+    const color = visit.type === "CITY" ? "bg-sky-600" : "bg-emerald-600";
+    const ring = visit.type === "CITY" ? "border-sky-600" : "border-emerald-600";
     return (
       <button onClick={() => onSelect(visit.id)} className={`${rowClass} ${indent ? "pl-6" : ""}`}>
         <span className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
             className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-              visit.type === "CITY" ? "bg-sky-600" : "bg-emerald-600"
+              wishlist ? `border-2 bg-transparent ${ring}` : color
             }`}
           />
-          <span className="truncate font-medium text-slate-700">{visit.name}</span>
+          <span className={`truncate font-medium ${wishlist ? "text-slate-500" : "text-slate-700"}`}>
+            {visit.name}
+          </span>
         </span>
         <span className="shrink-0 text-xs text-slate-400">
           {visit.photoCount > 0 && `${visit.photoCount} 📷`}
@@ -129,7 +176,25 @@ export default function SidePanel({
 
   let body: React.ReactNode;
 
-  if (draft) {
+  if (tripView && !draft && !selected) {
+    body = (
+      <TripDetail
+        trip={tripView}
+        stops={visitsByTrip.get(tripView.id) ?? []}
+        onBack={() => setTripViewId(null)}
+        onSelectStop={onSelect}
+        onRemoveStop={(id) => onSetTrip(id, null)}
+        onRename={(name) => onRenameTrip(tripView.id, name)}
+        onDelete={async () => {
+          const ok = await onDeleteTrip(tripView.id);
+          if (ok) setTripViewId(null);
+          return ok;
+        }}
+      />
+    );
+  } else if (showStats && !draft && !selected) {
+    body = <StatsPanel onBack={() => setShowStats(false)} />;
+  } else if (draft) {
     body = (
       <div className="p-4">
         <h2 className="text-lg font-semibold">Add visit</h2>
@@ -146,8 +211,10 @@ export default function SidePanel({
             initial={{
               name: draft.suggestedName ?? "",
               type: draft.suggestedType,
+              status: "VISITED",
               notes: "",
               visitedAt: "",
+              visitedTo: "",
             }}
             onSubmit={(values) => onCreate(draft, values)}
             onCancel={onClose}
@@ -160,7 +227,8 @@ export default function SidePanel({
       ? visits.find((v) => v.id === selected.parentId) ?? null
       : null;
     const childPlaces = placesByParent.get(selected.id) ?? [];
-    const visitedLabel = formatDate(selected.visitedAt);
+    const dateLabel = formatDateRange(selected.visitedAt, selected.visitedTo);
+    const wishlist = selected.status === "WISHLIST";
 
     body = (
       <div className="p-4">
@@ -181,11 +249,18 @@ export default function SidePanel({
                 initial={{
                   name: selected.name,
                   type: selected.type,
+                  status: selected.status,
                   notes: selected.notes ?? "",
                   visitedAt: selected.visitedAt ? selected.visitedAt.slice(0, 10) : "",
+                  visitedTo: selected.visitedTo ? selected.visitedTo.slice(0, 10) : "",
                 }}
                 onSubmit={async (values) => {
-                  const ok = await onUpdate(selected.id, values);
+                  const ok = await onUpdate(selected.id, {
+                    name: values.name,
+                    notes: values.notes,
+                    visitedAt: values.visitedAt,
+                    visitedTo: values.visitedTo,
+                  });
                   if (ok) setEditing(false);
                   return ok;
                 }}
@@ -197,7 +272,14 @@ export default function SidePanel({
           <>
             <div className="mt-3 flex items-start justify-between gap-2">
               <h2 className="min-w-0 break-words text-lg font-semibold">{selected.name}</h2>
-              <TypeBadge type={selected.type} />
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <TypeBadge type={selected.type} />
+                {wishlist && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    Wishlist
+                  </span>
+                )}
+              </div>
             </div>
 
             {parent && (
@@ -213,10 +295,16 @@ export default function SidePanel({
             )}
 
             <dl className="mt-3 space-y-1 text-sm">
-              {visitedLabel && (
+              {dateLabel && (
                 <div className="flex gap-2">
-                  <dt className="text-slate-400">Visited</dt>
-                  <dd className="text-slate-600">{visitedLabel}</dd>
+                  <dt className="text-slate-400">{wishlist ? "Planned" : "Visited"}</dt>
+                  <dd className="text-slate-600">{dateLabel}</dd>
+                </div>
+              )}
+              {selected.country && (
+                <div className="flex gap-2">
+                  <dt className="text-slate-400">Country</dt>
+                  <dd className="text-slate-600">{selected.country}</dd>
                 </div>
               )}
               <div className="flex gap-2">
@@ -231,7 +319,33 @@ export default function SidePanel({
               <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">{selected.notes}</p>
             )}
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex items-center gap-2">
+              <label htmlFor="trip-select" className="text-sm text-slate-400">
+                Trip
+              </label>
+              <select
+                id="trip-select"
+                value={selected.tripId ?? ""}
+                onChange={(e) => onSetTrip(selected.id, e.target.value || null)}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              >
+                <option value="">— None —</option>
+                {trips.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => onSetStatus(selected.id, wishlist ? "VISITED" : "WISHLIST")}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              {wishlist ? "Mark as visited" : "Move to wishlist"}
+            </button>
+
+            <div className="mt-2 flex gap-2">
               <button
                 onClick={() => setEditing(true)}
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
@@ -288,6 +402,81 @@ export default function SidePanel({
   } else {
     body = (
       <div className="flex min-h-0 flex-col p-4">
+        <button
+          onClick={() => setShowStats(true)}
+          className="mb-3 flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          <span className="flex items-center gap-2">
+            <span aria-hidden>📊</span> Travel stats
+          </span>
+          <span aria-hidden className="text-slate-400">
+            →
+          </span>
+        </button>
+
+        <section className="mb-3">
+          <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Trips
+          </h2>
+          {trips.length > 0 && (
+            <ul className="space-y-0.5">
+              {trips.map((t) => {
+                const count = visitsByTrip.get(t.id)?.length ?? 0;
+                return (
+                  <li key={t.id}>
+                    <button
+                      onClick={() => {
+                        setShowStats(false);
+                        setTripViewId(t.id);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-sky-500"
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: t.color }}
+                        />
+                        <span className="truncate font-medium text-slate-700">{t.name}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-slate-400">
+                        {count} {count === 1 ? "stop" : "stops"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const name = newTripName.trim();
+              if (!name) return;
+              setNewTripName("");
+              const id = await onCreateTrip(name);
+              if (id) setTripViewId(id);
+            }}
+            className="mt-1 flex gap-2"
+          >
+            <input
+              value={newTripName}
+              onChange={(e) => setNewTripName(e.target.value)}
+              maxLength={80}
+              placeholder="New trip…"
+              aria-label="New trip name"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+            />
+            <button
+              type="submit"
+              disabled={!newTripName.trim()}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-40"
+            >
+              Add
+            </button>
+          </form>
+        </section>
+
         <label htmlFor="search" className="sr-only">
           Search your visits
         </label>

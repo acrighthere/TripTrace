@@ -39,24 +39,50 @@ const notesField = z.preprocess(
   z.string().trim().max(2000, "Notes must be at most 2000 characters").nullable()
 );
 
-const visitedAtField = z.preprocess(
+const dateField = z.preprocess(
   (v) => (v === "" ? null : v),
   z.coerce.date().nullable()
 );
 
-export const visitCreateSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters"),
-  type: z.enum(["CITY", "PLACE"]),
-  lat: z.number().gte(-90).lte(90),
-  lng: z.number().gte(-180).lte(180),
-  notes: notesField.optional(),
-  visitedAt: visitedAtField.optional(),
+// End date must not precede the start date when both are given.
+const endAfterStart = (d: { visitedAt?: Date | null; visitedTo?: Date | null }) =>
+  !d.visitedAt || !d.visitedTo || d.visitedTo >= d.visitedAt;
+const endAfterStartIssue = {
+  message: "End date can't be before the start date",
+  path: ["visitedTo"] as PropertyKey[],
+};
+
+export const visitCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters"),
+    type: z.enum(["CITY", "PLACE"]),
+    status: z.enum(["VISITED", "WISHLIST"]).optional(),
+    lat: z.number().gte(-90).lte(90),
+    lng: z.number().gte(-180).lte(180),
+    notes: notesField.optional(),
+    visitedAt: dateField.optional(),
+    visitedTo: dateField.optional(),
+  })
+  .refine(endAfterStart, endAfterStartIssue);
+
+export const visitUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters").optional(),
+    status: z.enum(["VISITED", "WISHLIST"]).optional(),
+    notes: notesField.optional(),
+    visitedAt: dateField.optional(),
+    visitedTo: dateField.optional(),
+    // null clears the trip; a string assigns one (ownership checked in the route).
+    tripId: z.preprocess((v) => (v === "" ? null : v), z.string().max(64).nullable()).optional(),
+  })
+  .refine(endAfterStart, endAfterStartIssue);
+
+export const tripCreateSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(80, "Name must be at most 80 characters"),
 });
 
-export const visitUpdateSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(120, "Name must be at most 120 characters").optional(),
-  notes: notesField.optional(),
-  visitedAt: visitedAtField.optional(),
+export const tripUpdateSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(80, "Name must be at most 80 characters"),
 });
 
 export const photoPresignSchema = z.object({

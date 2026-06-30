@@ -1,12 +1,15 @@
-// City administrative boundaries from Nominatim (env-switchable to a
+// City administrative boundaries + country from Nominatim (env-switchable to a
 // self-hosted instance — that also satisfies the OSMF policy clause that an
 // app must be able to change providers without a code update).
 //
 // Public-instance policy (https://operations.osmfoundation.org/policies/nominatim/):
 // max 1 request/second per application, identifying User-Agent, cache results
-// on our side. Calls here are serialized through an in-process queue and the
-// fetched polygon is persisted on the Visit row, so each pinned city costs
-// one lookup ever. Only CITY pin coordinates are sent — never place pins.
+// on our side. Calls here are serialized through an in-process queue and both
+// the polygon and the country are persisted on the Visit row, so each pinned
+// city costs one lookup ever. Only CITY pin coordinates are sent — never
+// place pins (places inherit their country from the parent city).
+
+import { continentForCode } from "@/lib/continents";
 
 const BASE_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 const USER_AGENT = "TripTrace/0.1 (self-hosted personal travel map)";
@@ -32,7 +35,17 @@ export interface CityBoundary {
   geojson: string;
   /** Sanity cap checked in SQL before storing */
   maxAreaKm2: number;
-  displayName: string;
+}
+
+export interface CityLookup {
+  /** null when no usable city/microstate polygon was returned */
+  boundary: CityBoundary | null;
+  /** country display name, e.g. "Italy" / "Vatican City" */
+  country: string | null;
+  /** ISO 3166-1 alpha-2, lowercase, e.g. "it" / "va" */
+  countryCode: string | null;
+  /** derived from countryCode */
+  continent: string | null;
 }
 
 interface NominatimReverse {
@@ -41,6 +54,7 @@ interface NominatimReverse {
   addresstype?: string;
   display_name?: string;
   geojson?: { type: string };
+  address?: { country?: string; country_code?: string };
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -68,14 +82,15 @@ async function reverseLookup(
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("zoom", "10"); // city-level admin area
   url.searchParams.set("polygon_geojson", "1");
-  url.searchParams.set("addressdetails", "0");
+  url.searchParams.set("addressdetails", "1"); // for address.country / country_code
   if (threshold) url.searchParams.set("polygon_threshold", String(threshold));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
+      // English country names regardless of the place's local language.
+      headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
       signal: controller.signal,
     });
     if (!res.ok) return null;
@@ -91,39 +106,54 @@ function polygonOf(data: NominatimReverse | null): { type: string } | null {
   return geo;
 }
 
-/**
- * Best-effort: returns null on timeouts, non-city results (counties, plain
- * place nodes without polygons), or oceans — the caller falls back to the
- * radius heuristic in that case.
- */
-export async function fetchCityBoundary(lat: number, lng: number): Promise<CityBoundary | null> {
-  try {
-    let data = await throttled(() => reverseLookup(lat, lng));
-    if (!data || data.error) return null;
+async function boundaryFrom(
+  data: NominatimReverse,
+  lat: number,
+  lng: number
+): Promise<CityBoundary | null> {
+  const rank = Number(data.place_rank ?? 0);
+  const isCityBand = rank >= 13 && rank <= 16;
+  const isMicrostate = data.addresstype === "country";
+  if (!isCityBand && !isMicrostate) return null;
 
-    const rank = Number(data.place_rank ?? 0);
-    const isCityBand = rank >= 13 && rank <= 16;
-    const isMicrostate = data.addresstype === "country";
-    if (!isCityBand && !isMicrostate) return null;
+  let geo = polygonOf(data);
+  if (!geo) return null;
 
-    let geo = polygonOf(data);
+  let geojson = JSON.stringify(geo);
+  if (geojson.length > RAW_SIZE_LIMIT) {
+    const simplified = await throttled(() => reverseLookup(lat, lng, SIMPLIFY_THRESHOLD_DEG));
+    geo = polygonOf(simplified);
     if (!geo) return null;
+    geojson = JSON.stringify(geo);
+  }
 
-    let geojson = JSON.stringify(geo);
-    if (geojson.length > RAW_SIZE_LIMIT) {
-      data = await throttled(() => reverseLookup(lat, lng, SIMPLIFY_THRESHOLD_DEG));
-      geo = polygonOf(data);
-      if (!geo) return null;
-      geojson = JSON.stringify(geo);
-    }
+  return {
+    geojson,
+    maxAreaKm2: isCityBand ? CITY_AREA_CAP_KM2 : COUNTRY_AREA_CAP_KM2,
+  };
+}
 
-    return {
-      geojson,
-      maxAreaKm2: isCityBand ? CITY_AREA_CAP_KM2 : COUNTRY_AREA_CAP_KM2,
-      displayName: String(data?.display_name ?? ""),
-    };
+/**
+ * One reverse lookup yields both the country (always, when Nominatim returns
+ * an address) and a city/microstate boundary polygon (when the result is a
+ * city-band or microstate). Country is captured even when the polygon is
+ * rejected (counties, oceans, place nodes), so country stats stay populated.
+ * Best-effort: everything is null on a timeout or error.
+ */
+export async function lookupCity(lat: number, lng: number): Promise<CityLookup> {
+  const empty: CityLookup = { boundary: null, country: null, countryCode: null, continent: null };
+  try {
+    const data = await throttled(() => reverseLookup(lat, lng));
+    if (!data || data.error) return empty;
+
+    const countryCode = data.address?.country_code?.toLowerCase() ?? null;
+    const country = data.address?.country ?? null;
+    const continent = continentForCode(countryCode);
+    const boundary = await boundaryFrom(data, lat, lng);
+
+    return { boundary, country, countryCode, continent };
   } catch (err) {
     console.error("[boundaries] lookup failed", err);
-    return null;
+    return empty;
   }
 }

@@ -1,19 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DraftPin, VisitDto } from "@/types";
+import type { DraftPin, TripDto, VisitDto, VisitStatus, VisitType } from "@/types";
 import MapView, { type FlyToTarget } from "@/components/MapView";
 import SidePanel from "@/components/SidePanel";
 import { ToastProvider, useToast } from "@/components/Toast";
 
 export interface VisitFormValues {
   name: string;
-  type: "CITY" | "PLACE";
+  type: VisitType;
+  status: VisitStatus;
   /** "" means not set */
   notes: string;
   /** yyyy-mm-dd or "" */
   visitedAt: string;
+  /** yyyy-mm-dd or "" */
+  visitedTo: string;
 }
+
+export type VisitEditValues = Pick<VisitFormValues, "name" | "notes" | "visitedAt" | "visitedTo">;
 
 interface MapAppProps {
   styleUrl: string;
@@ -34,6 +39,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const toast = useToast();
 
   const [visits, setVisits] = useState<VisitDto[] | null>(null);
+  const [trips, setTrips] = useState<TripDto[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPin | null>(null);
@@ -44,10 +50,14 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const res = await fetch("/api/visits");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { visits: VisitDto[] };
-      setVisits(data.visits);
+      const [vRes, tRes] = await Promise.all([fetch("/api/visits"), fetch("/api/trips")]);
+      if (!vRes.ok) throw new Error(`HTTP ${vRes.status}`);
+      const vData = (await vRes.json()) as { visits: VisitDto[] };
+      setVisits(vData.visits);
+      if (tRes.ok) {
+        const tData = (await tRes.json()) as { trips: TripDto[] };
+        setTrips(tData.trips);
+      }
     } catch {
       setLoadError("Couldn't load your visits.");
     }
@@ -109,12 +119,18 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
       const optimistic: VisitDto = {
         id: tempId,
         type: values.type,
+        status: values.status,
         name: values.name,
         lat: pin.lat,
         lng: pin.lng,
         parentId: null,
+        tripId: null,
         notes: values.notes || null,
+        country: null,
+        countryCode: null,
+        continent: null,
         visitedAt: values.visitedAt ? new Date(values.visitedAt).toISOString() : null,
+        visitedTo: values.visitedTo ? new Date(values.visitedTo).toISOString() : null,
         createdAt: new Date().toISOString(),
         photoCount: 0,
         placeCount: 0,
@@ -129,10 +145,12 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
           body: JSON.stringify({
             name: values.name,
             type: values.type,
+            status: values.status,
             lat: pin.lat,
             lng: pin.lng,
             notes: values.notes || null,
             visitedAt: values.visitedAt || null,
+            visitedTo: values.visitedTo || null,
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -160,7 +178,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   );
 
   const updateVisit = useCallback(
-    async (id: string, values: Omit<VisitFormValues, "type">): Promise<boolean> => {
+    async (id: string, values: VisitEditValues): Promise<boolean> => {
       const snapshot = visits;
       setVisits((v) =>
         (v ?? []).map((x) =>
@@ -169,9 +187,8 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
                 ...x,
                 name: values.name,
                 notes: values.notes || null,
-                visitedAt: values.visitedAt
-                  ? new Date(values.visitedAt).toISOString()
-                  : null,
+                visitedAt: values.visitedAt ? new Date(values.visitedAt).toISOString() : null,
+                visitedTo: values.visitedTo ? new Date(values.visitedTo).toISOString() : null,
               }
             : x
         )
@@ -185,6 +202,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
             name: values.name,
             notes: values.notes || null,
             visitedAt: values.visitedAt || null,
+            visitedTo: values.visitedTo || null,
           }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -199,6 +217,40 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
       }
     },
     [visits, toast]
+  );
+
+  /** Generic single-field PATCH on a visit (status, trip assignment). */
+  const patchVisit = useCallback(
+    async (id: string, patch: Partial<{ status: VisitStatus; tripId: string | null }>, label: string) => {
+      const snapshot = visits;
+      setVisits((v) => (v ?? []).map((x) => (x.id === id ? { ...x, ...patch } : x)));
+      try {
+        const res = await fetch(`/api/visits/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { visit: VisitDto };
+        setVisits((v) => (v ?? []).map((x) => (x.id === id ? data.visit : x)));
+        toast(label);
+      } catch {
+        if (snapshot) setVisits(snapshot);
+        toast("Couldn't save. Try again.", "error");
+      }
+    },
+    [visits, toast]
+  );
+
+  const setVisitStatus = useCallback(
+    (id: string, status: VisitStatus) =>
+      patchVisit(id, { status }, status === "VISITED" ? "Marked visited" : "Moved to wishlist"),
+    [patchVisit]
+  );
+
+  const setVisitTrip = useCallback(
+    (id: string, tripId: string | null) => patchVisit(id, { tripId }, tripId ? "Added to trip" : "Removed from trip"),
+    [patchVisit]
   );
 
   const deleteVisit = useCallback(
@@ -234,11 +286,76 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
     );
   }, []);
 
+  const createTrip = useCallback(
+    async (name: string): Promise<string | null> => {
+      try {
+        const res = await fetch("/api/trips", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { trip: TripDto };
+        setTrips((t) => [data.trip, ...t]);
+        toast("Trip created");
+        return data.trip.id;
+      } catch {
+        toast("Couldn't create trip.", "error");
+        return null;
+      }
+    },
+    [toast]
+  );
+
+  const renameTrip = useCallback(
+    async (id: string, name: string): Promise<boolean> => {
+      const snapshot = trips;
+      setTrips((t) => t.map((x) => (x.id === id ? { ...x, name } : x)));
+      try {
+        const res = await fetch(`/api/trips/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast("Saved");
+        return true;
+      } catch {
+        setTrips(snapshot);
+        toast("Couldn't rename trip.", "error");
+        return false;
+      }
+    },
+    [trips, toast]
+  );
+
+  const deleteTrip = useCallback(
+    async (id: string): Promise<boolean> => {
+      const tripsSnap = trips;
+      const visitsSnap = visits;
+      setTrips((t) => t.filter((x) => x.id !== id));
+      setVisits((v) => (v ?? []).map((x) => (x.tripId === id ? { ...x, tripId: null } : x)));
+      try {
+        const res = await fetch(`/api/trips/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        toast("Trip deleted");
+        return true;
+      } catch {
+        setTrips(tripsSnap);
+        if (visitsSnap) setVisits(visitsSnap);
+        toast("Couldn't delete trip.", "error");
+        return false;
+      }
+    },
+    [trips, visits, toast]
+  );
+
   return (
     <div className="relative h-dvh w-full overflow-hidden">
       <MapView
         styleUrl={styleUrl}
         visits={visits ?? []}
+        trips={trips}
         loading={visits === null && !loadError}
         error={loadError}
         onRetry={load}
@@ -251,6 +368,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
       <SidePanel
         userEmail={userEmail}
         visits={visits ?? []}
+        trips={trips}
         loading={visits === null && !loadError}
         selectedId={selectedId}
         draft={draft}
@@ -259,6 +377,11 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         onCreate={createVisit}
         onUpdate={updateVisit}
         onDelete={deleteVisit}
+        onSetStatus={setVisitStatus}
+        onSetTrip={setVisitTrip}
+        onCreateTrip={createTrip}
+        onRenameTrip={renameTrip}
+        onDeleteTrip={deleteTrip}
         onPhotoCountChange={adjustPhotoCount}
       />
     </div>

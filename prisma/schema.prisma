@@ -20,6 +20,7 @@ model User {
   accounts Account[]
   sessions Session[]
   visits   Visit[]
+  trips    Trip[]
 }
 
 model Account {
@@ -65,17 +66,44 @@ enum VisitType {
   PLACE
 }
 
+enum VisitStatus {
+  VISITED
+  WISHLIST
+}
+
+model Trip {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  color     String?
+  createdAt DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visits Visit[]
+
+  @@index([userId])
+}
+
 model Visit {
-  id        String    @id @default(cuid())
+  id        String      @id @default(cuid())
   userId    String
   type      VisitType
+  status    VisitStatus @default(VISITED)
   name      String
   lat       Float
   lng       Float
   parentId  String?
+  tripId    String?
   notes     String?
   visitedAt DateTime?
-  createdAt DateTime  @default(now())
+  visitedTo DateTime?
+  createdAt DateTime    @default(now())
+
+  // Country a visit sits in. For CITY rows it comes from the Nominatim reverse
+  // lookup done at creation; PLACE rows inherit it from their parent city.
+  country     String?
+  countryCode String? // ISO 3166-1 alpha-2, lowercase
+  continent   String?
 
   // Synced from lat/lng by the visit_geom_sync trigger (see the visit_geom
   // migration); GIST-indexed there too. Declared so migrate dev won't drop it.
@@ -90,10 +118,13 @@ model Visit {
   // in app code (required anyway to clean up their photos' MinIO objects).
   parent   Visit?  @relation("VisitChildren", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   children Visit[] @relation("VisitChildren")
+  trip     Trip?   @relation(fields: [tripId], references: [id], onDelete: SetNull)
   photos   Photo[]
 
   @@index([userId])
   @@index([parentId])
+  @@index([tripId])
+  @@index([userId, countryCode])
 }
 
 model Photo {
