@@ -7,6 +7,8 @@ import VisitForm from "@/components/VisitForm";
 import PhotoSection from "@/components/PhotoSection";
 import StatsPanel from "@/components/StatsPanel";
 import TripDetail from "@/components/TripDetail";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { useT, useLocale, formatDateRange } from "@/lib/i18n";
 import type { VisitEditValues, VisitFormValues } from "@/components/MapApp";
 
 interface SidePanelProps {
@@ -29,31 +31,15 @@ interface SidePanelProps {
   onPhotoCountChange: (visitId: string, delta: number) => void;
 }
 
-function formatDate(iso: string | null): string | null {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-/** "12 Mar 2025" or "12–15 Mar 2025"-style range when an end date is set. */
-function formatDateRange(from: string | null, to: string | null): string | null {
-  const f = formatDate(from);
-  if (!f) return null;
-  const t = formatDate(to);
-  return t && t !== f ? `${f} – ${t}` : f;
-}
-
 function TypeBadge({ type }: { type: VisitDto["type"] }) {
+  const t = useT();
   return (
     <span
       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
         type === "CITY" ? "bg-sky-100 text-sky-700" : "bg-emerald-100 text-emerald-700"
       }`}
     >
-      {type === "CITY" ? "City" : "Place"}
+      {type === "CITY" ? t("common.city") : t("common.place")}
     </span>
   );
 }
@@ -77,6 +63,8 @@ export default function SidePanel({
   onDeleteTrip,
   onPhotoCountChange,
 }: SidePanelProps) {
+  const t = useT();
+  const locale = useLocale();
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
@@ -197,11 +185,14 @@ export default function SidePanel({
   } else if (draft) {
     body = (
       <div className="p-4">
-        <h2 className="text-lg font-semibold">Add visit</h2>
+        <h2 className="text-lg font-semibold">{t("sidepanel.addVisit")}</h2>
         <p className="mt-0.5 text-xs text-slate-400">
           {draft.suggestedName
-            ? `“${draft.suggestedName}” from the map label — adjust anything before saving.`
-            : `Pinned at ${draft.lat.toFixed(4)}, ${draft.lng.toFixed(4)}`}
+            ? t("sidepanel.fromMapLabel", { name: draft.suggestedName })
+            : t("sidepanel.pinnedAt", {
+                lat: draft.lat.toFixed(4),
+                lng: draft.lng.toFixed(4),
+              })}
         </p>
         <div className="mt-4">
           <VisitForm
@@ -227,7 +218,7 @@ export default function SidePanel({
       ? visits.find((v) => v.id === selected.parentId) ?? null
       : null;
     const childPlaces = placesByParent.get(selected.id) ?? [];
-    const dateLabel = formatDateRange(selected.visitedAt, selected.visitedTo);
+    const dateLabel = formatDateRange(selected.visitedAt, selected.visitedTo, locale);
     const wishlist = selected.status === "WISHLIST";
 
     body = (
@@ -236,12 +227,12 @@ export default function SidePanel({
           onClick={onClose}
           className="text-sm text-slate-500 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-sky-500"
         >
-          ← All places
+          {t("sidepanel.allPlaces")}
         </button>
 
         {editing ? (
           <div className="mt-4">
-            <h2 className="text-lg font-semibold">Edit visit</h2>
+            <h2 className="text-lg font-semibold">{t("sidepanel.editVisit")}</h2>
             <div className="mt-4">
               <VisitForm
                 mode="edit"
@@ -276,7 +267,7 @@ export default function SidePanel({
                 <TypeBadge type={selected.type} />
                 {wishlist && (
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                    Wishlist
+                    {t("sidepanel.wishlist")}
                   </span>
                 )}
               </div>
@@ -284,7 +275,7 @@ export default function SidePanel({
 
             {parent && (
               <p className="mt-1 text-sm text-slate-500">
-                in{" "}
+                {t("sidepanel.in")}{" "}
                 <button
                   onClick={() => onSelect(parent.id)}
                   className="font-medium text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500"
@@ -297,18 +288,20 @@ export default function SidePanel({
             <dl className="mt-3 space-y-1 text-sm">
               {dateLabel && (
                 <div className="flex gap-2">
-                  <dt className="text-slate-400">{wishlist ? "Planned" : "Visited"}</dt>
+                  <dt className="text-slate-400">
+                    {wishlist ? t("sidepanel.planned") : t("sidepanel.visited")}
+                  </dt>
                   <dd className="text-slate-600">{dateLabel}</dd>
                 </div>
               )}
               {selected.country && (
                 <div className="flex gap-2">
-                  <dt className="text-slate-400">Country</dt>
+                  <dt className="text-slate-400">{t("sidepanel.country")}</dt>
                   <dd className="text-slate-600">{selected.country}</dd>
                 </div>
               )}
               <div className="flex gap-2">
-                <dt className="text-slate-400">Coordinates</dt>
+                <dt className="text-slate-400">{t("sidepanel.coordinates")}</dt>
                 <dd className="text-slate-600">
                   {selected.lat.toFixed(4)}, {selected.lng.toFixed(4)}
                 </dd>
@@ -321,7 +314,7 @@ export default function SidePanel({
 
             <div className="mt-4 flex items-center gap-2">
               <label htmlFor="trip-select" className="text-sm text-slate-400">
-                Trip
+                {t("sidepanel.trip")}
               </label>
               <select
                 id="trip-select"
@@ -329,7 +322,7 @@ export default function SidePanel({
                 onChange={(e) => onSetTrip(selected.id, e.target.value || null)}
                 className="min-w-0 flex-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
               >
-                <option value="">— None —</option>
+                <option value="">{t("sidepanel.none")}</option>
                 {trips.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}
@@ -342,7 +335,7 @@ export default function SidePanel({
               onClick={() => onSetStatus(selected.id, wishlist ? "VISITED" : "WISHLIST")}
               className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              {wishlist ? "Mark as visited" : "Move to wishlist"}
+              {wishlist ? t("sidepanel.markVisited") : t("sidepanel.moveToWishlist")}
             </button>
 
             <div className="mt-2 flex gap-2">
@@ -350,7 +343,7 @@ export default function SidePanel({
                 onClick={() => setEditing(true)}
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
               >
-                Edit
+                {t("common.edit")}
               </button>
               {confirmingDelete ? (
                 <>
@@ -359,14 +352,14 @@ export default function SidePanel({
                     className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
                   >
                     {selected.type === "CITY" && childPlaces.length > 0
-                      ? `Delete + ${childPlaces.length} place${childPlaces.length === 1 ? "" : "s"}`
-                      : "Confirm delete"}
+                      ? t("sidepanel.deleteWithPlaces", { count: childPlaces.length })
+                      : t("sidepanel.confirmDelete")}
                   </button>
                   <button
                     onClick={() => setConfirmingDelete(false)}
                     className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
                   >
-                    Cancel
+                    {t("common.cancel")}
                   </button>
                 </>
               ) : (
@@ -374,7 +367,7 @@ export default function SidePanel({
                   onClick={() => setConfirmingDelete(true)}
                   className="flex-1 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500"
                 >
-                  Delete
+                  {t("common.delete")}
                 </button>
               )}
             </div>
@@ -382,7 +375,7 @@ export default function SidePanel({
             {selected.type === "CITY" && childPlaces.length > 0 && (
               <section className="mt-5">
                 <h3 className="text-sm font-semibold text-slate-700">
-                  Places in {selected.name}
+                  {t("sidepanel.placesIn", { name: selected.name })}
                 </h3>
                 <ul className="mt-1">
                   {childPlaces.map((p) => (
@@ -407,7 +400,7 @@ export default function SidePanel({
           className="mb-3 flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
         >
           <span className="flex items-center gap-2">
-            <span aria-hidden>📊</span> Travel stats
+            <span aria-hidden>📊</span> {t("sidepanel.travelStats")}
           </span>
           <span aria-hidden className="text-slate-400">
             →
@@ -416,18 +409,18 @@ export default function SidePanel({
 
         <section className="mb-3">
           <h2 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Trips
+            {t("sidepanel.trips")}
           </h2>
           {trips.length > 0 && (
             <ul className="space-y-0.5">
-              {trips.map((t) => {
-                const count = visitsByTrip.get(t.id)?.length ?? 0;
+              {trips.map((trip) => {
+                const count = visitsByTrip.get(trip.id)?.length ?? 0;
                 return (
-                  <li key={t.id}>
+                  <li key={trip.id}>
                     <button
                       onClick={() => {
                         setShowStats(false);
-                        setTripViewId(t.id);
+                        setTripViewId(trip.id);
                       }}
                       className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-sky-500"
                     >
@@ -435,12 +428,12 @@ export default function SidePanel({
                         <span
                           aria-hidden
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: t.color }}
+                          style={{ backgroundColor: trip.color }}
                         />
-                        <span className="truncate font-medium text-slate-700">{t.name}</span>
+                        <span className="truncate font-medium text-slate-700">{trip.name}</span>
                       </span>
                       <span className="shrink-0 text-xs text-slate-400">
-                        {count} {count === 1 ? "stop" : "stops"}
+                        {t("sidepanel.stops", { count })}
                       </span>
                     </button>
                   </li>
@@ -463,8 +456,8 @@ export default function SidePanel({
               value={newTripName}
               onChange={(e) => setNewTripName(e.target.value)}
               maxLength={80}
-              placeholder="New trip…"
-              aria-label="New trip name"
+              placeholder={t("sidepanel.newTripPlaceholder")}
+              aria-label={t("sidepanel.newTripName")}
               className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
             />
             <button
@@ -472,29 +465,31 @@ export default function SidePanel({
               disabled={!newTripName.trim()}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-40"
             >
-              Add
+              {t("sidepanel.add")}
             </button>
           </form>
         </section>
 
         <label htmlFor="search" className="sr-only">
-          Search your visits
+          {t("sidepanel.searchVisits")}
         </label>
         <input
           id="search"
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search cities and places…"
+          placeholder={t("sidepanel.searchPlaceholder")}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
         />
 
         <div className="mt-3 min-h-0 flex-1">
           {loading ? (
-            <p className="px-2 text-sm text-slate-400">Loading…</p>
+            <p className="px-2 text-sm text-slate-400">{t("common.loading")}</p>
           ) : searchResults ? (
             searchResults.length === 0 ? (
-              <p className="px-2 text-sm text-slate-400">Nothing matches “{search.trim()}”.</p>
+              <p className="px-2 text-sm text-slate-400">
+                {t("sidepanel.nothingMatches", { query: search.trim() })}
+              </p>
             ) : (
               <ul>
                 {searchResults.map((v) => (
@@ -509,7 +504,7 @@ export default function SidePanel({
             )
           ) : visits.length === 0 ? (
             <p className="px-2 text-sm text-slate-400">
-              Your visited cities and places will appear here.
+              {t("sidepanel.emptyState")}
             </p>
           ) : (
             <>
@@ -523,7 +518,11 @@ export default function SidePanel({
                         <button
                           onClick={() => toggleExpanded(city.id)}
                           aria-expanded={isExpanded}
-                          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${city.name}`}
+                          aria-label={
+                            isExpanded
+                              ? t("sidepanel.collapse", { name: city.name })
+                              : t("sidepanel.expand", { name: city.name })
+                          }
                           disabled={children.length === 0}
                           className="rounded p-1 text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-sky-500 disabled:opacity-30"
                         >
@@ -557,7 +556,7 @@ export default function SidePanel({
               {(placesByParent.get("__orphan__") ?? []).length > 0 && (
                 <section className="mt-3">
                   <h3 className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Other places
+                    {t("sidepanel.otherPlaces")}
                   </h3>
                   <ul className="mt-1">
                     {(placesByParent.get("__orphan__") ?? []).map((p) => (
@@ -577,7 +576,7 @@ export default function SidePanel({
 
   return (
     <aside
-      aria-label="Your visits"
+      aria-label={t("sidepanel.yourVisits")}
       className="absolute inset-x-0 bottom-0 z-20 flex max-h-[60dvh] flex-col rounded-t-2xl border-t border-slate-200 bg-white shadow-2xl md:inset-y-0 md:left-0 md:right-auto md:h-full md:max-h-none md:w-96 md:rounded-none md:border-r md:border-t-0"
     >
       <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
@@ -585,12 +584,15 @@ export default function SidePanel({
           <h1 className="text-base font-semibold tracking-tight">TripTrace</h1>
           <p className="truncate text-xs text-slate-400">{userEmail}</p>
         </div>
-        <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
-          className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
-        >
-          Log out
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <LanguageSwitcher />
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="shrink-0 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
+          >
+            {t("common.logOut")}
+          </button>
+        </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
     </aside>

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { PhotoDto } from "@/types";
 import { ALLOWED_PHOTO_TYPES, MAX_PHOTO_BYTES } from "@/lib/validation";
 import { useToast } from "@/components/Toast";
+import { useT } from "@/lib/i18n";
 
 interface PhotoSectionProps {
   visitId: string;
@@ -12,6 +13,7 @@ interface PhotoSectionProps {
 
 export default function PhotoSection({ visitId, onCountChange }: PhotoSectionProps) {
   const toast = useToast();
+  const t = useT();
   const [photos, setPhotos] = useState<PhotoDto[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -39,7 +41,7 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
         const data = (await res.json()) as { photos: PhotoDto[] };
         if (!cancelled) setPhotos(data.photos);
       } catch {
-        if (!cancelled) setLoadError("Couldn't load photos.");
+        if (!cancelled) setLoadError(t("photos.loadError"));
       }
     })();
     return () => {
@@ -54,12 +56,12 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
       return;
     }
     if (!(ALLOWED_PHOTO_TYPES as readonly string[]).includes(f.type)) {
-      setUploadError("Use a JPEG, PNG, or WebP image.");
+      setUploadError(t("photos.invalidType"));
       setFile(null);
       return;
     }
     if (f.size > MAX_PHOTO_BYTES) {
-      setUploadError("Photos can be at most 8 MB.");
+      setUploadError(t("photos.tooLarge"));
       setFile(null);
       return;
     }
@@ -102,9 +104,9 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
       setCaption("");
       if (fileInputRef.current) fileInputRef.current.value = "";
       onCountChange(visitId, 1);
-      toast("Photo uploaded");
+      toast(t("photos.uploaded"));
     } catch {
-      setUploadError("Upload failed. Try again.");
+      setUploadError(t("photos.uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -117,27 +119,27 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
       const res = await fetch(`/api/photos/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       onCountChange(visitId, -1);
-      toast("Deleted");
+      toast(t("common.deleted"));
     } catch {
       setPhotos(snapshot);
-      toast("Couldn't delete. Try again.", "error");
+      toast(t("common.tryAgain"), "error");
     }
   }
 
   return (
     <section className="mt-6">
-      <h3 className="text-sm font-semibold text-slate-700">Photos</h3>
+      <h3 className="text-sm font-semibold text-slate-700">{t("photos.heading")}</h3>
 
       {!ready ? (
-        <p className="mt-2 text-sm text-slate-400">Photos can be added once the visit is saved.</p>
+        <p className="mt-2 text-sm text-slate-400">{t("photos.notSavedYet")}</p>
       ) : loadError ? (
         <p className="mt-2 text-sm text-red-700">{loadError}</p>
       ) : photos === null ? (
-        <p className="mt-2 text-sm text-slate-400">Loading photos…</p>
+        <p className="mt-2 text-sm text-slate-400">{t("photos.loading")}</p>
       ) : (
         <>
           {photos.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-400">No photos yet.</p>
+            <p className="mt-2 text-sm text-slate-400">{t("photos.empty")}</p>
           ) : (
             <ul className="mt-2 grid grid-cols-2 gap-2">
               {photos.map((photo) => (
@@ -146,7 +148,7 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={photo.url}
-                      alt={photo.caption ?? "Travel photo"}
+                      alt={photo.caption ?? t("photos.alt")}
                       className="h-28 w-full rounded-lg object-cover"
                       loading="lazy"
                     />
@@ -156,10 +158,10 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
                   )}
                   <button
                     onClick={() => removePhoto(photo.id)}
-                    aria-label="Delete photo"
+                    aria-label={t("photos.deleteAria")}
                     className="absolute right-1 top-1 rounded-md bg-black/55 px-1.5 py-0.5 text-xs text-white opacity-0 transition-opacity focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-white group-hover:opacity-100"
                   >
-                    Delete
+                    {t("photos.delete")}
                   </button>
                 </li>
               ))}
@@ -181,7 +183,7 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
                   value={caption}
                   onChange={(e) => setCaption(e.target.value)}
                   maxLength={300}
-                  placeholder="Caption (optional)"
+                  placeholder={t("photos.captionPlaceholder")}
                   className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
                 />
                 <button
@@ -189,7 +191,7 @@ export default function PhotoSection({ visitId, onCountChange }: PhotoSectionPro
                   disabled={uploading}
                   className="w-full rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:opacity-60"
                 >
-                  {uploading ? "Uploading…" : "Upload photo"}
+                  {uploading ? t("photos.uploading") : t("photos.upload")}
                 </button>
               </>
             )}

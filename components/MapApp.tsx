@@ -5,6 +5,7 @@ import type { DraftPin, TripDto, VisitDto, VisitStatus, VisitType } from "@/type
 import MapView, { type FlyToTarget } from "@/components/MapView";
 import SidePanel from "@/components/SidePanel";
 import { ToastProvider, useToast } from "@/components/Toast";
+import { useT } from "@/lib/i18n";
 
 export interface VisitFormValues {
   name: string;
@@ -37,6 +38,7 @@ function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): num
 
 function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const toast = useToast();
+  const t = useT();
 
   const [visits, setVisits] = useState<VisitDto[] | null>(null);
   const [trips, setTrips] = useState<TripDto[]>([]);
@@ -69,9 +71,9 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         setTrips(tData.trips);
       }
     } catch {
-      setLoadError("Couldn't load your visits.");
+      setLoadError(t("map.loadError"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -108,14 +110,14 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         if (existing) {
           setDraft(null);
           setSelectedId(existing.id);
-          toast("Already pinned");
+          toast(t("map.alreadyPinned"));
           return;
         }
       }
       setSelectedId(null);
       setDraft(pin);
     },
-    [visits, toast]
+    [visits, toast, t]
   );
 
   const closePanels = useCallback(() => {
@@ -171,20 +173,20 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         // and resync since other visits' parent links changed server-side.
         const adopted = data.adoptedPlaces ?? 0;
         if (adopted > 0) {
-          toast(`Saved — ${adopted} place${adopted === 1 ? "" : "s"} attached`);
+          toast(t("map.placesAttached", { count: adopted }));
           void load();
         } else {
-          toast("Saved");
+          toast(t("common.saved"));
         }
         return true;
       } catch {
         setVisits((v) => (v ?? []).filter((x) => x.id !== tempId));
         setDraft(pin);
-        toast("Couldn't save. Try again.", "error");
+        toast(t("common.tryAgain"), "error");
         return false;
       }
     },
-    [toast, load]
+    [toast, load, t]
   );
 
   const updateVisit = useCallback(
@@ -218,15 +220,15 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { visit: VisitDto };
         setVisits((v) => (v ?? []).map((x) => (x.id === id ? data.visit : x)));
-        toast("Saved");
+        toast(t("common.saved"));
         return true;
       } catch {
         if (snapshot) setVisits(snapshot);
-        toast("Couldn't save. Try again.", "error");
+        toast(t("common.tryAgain"), "error");
         return false;
       }
     },
-    [visits, toast]
+    [visits, toast, t]
   );
 
   /** Generic single-field PATCH on a visit (status, trip assignment). */
@@ -246,21 +248,21 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         toast(label);
       } catch {
         if (snapshot) setVisits(snapshot);
-        toast("Couldn't save. Try again.", "error");
+        toast(t("common.tryAgain"), "error");
       }
     },
-    [visits, toast]
+    [visits, toast, t]
   );
 
   const setVisitStatus = useCallback(
     (id: string, status: VisitStatus) =>
-      patchVisit(id, { status }, status === "VISITED" ? "Marked visited" : "Moved to wishlist"),
-    [patchVisit]
+      patchVisit(id, { status }, status === "VISITED" ? t("map.markedVisited") : t("map.movedToWishlist")),
+    [patchVisit, t]
   );
 
   const setVisitTrip = useCallback(
-    (id: string, tripId: string | null) => patchVisit(id, { tripId }, tripId ? "Added to trip" : "Removed from trip"),
-    [patchVisit]
+    (id: string, tripId: string | null) => patchVisit(id, { tripId }, tripId ? t("map.addedToTrip") : t("map.removedFromTrip")),
+    [patchVisit, t]
   );
 
   const deleteVisit = useCallback(
@@ -276,16 +278,16 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
       try {
         const res = await fetch(`/api/visits/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        toast("Deleted");
+        toast(t("common.deleted"));
         return true;
       } catch {
         if (snapshot) setVisits(snapshot);
         setSelectedId(id);
-        toast("Couldn't delete. Try again.", "error");
+        toast(t("map.couldntDelete"), "error");
         return false;
       }
     },
-    [visits, toast]
+    [visits, toast, t]
   );
 
   const adjustPhotoCount = useCallback((id: string, delta: number) => {
@@ -306,21 +308,21 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { trip: TripDto };
-        setTrips((t) => [data.trip, ...t]);
-        toast("Trip created");
+        setTrips((prev) => [data.trip, ...prev]);
+        toast(t("map.tripCreated"));
         return data.trip.id;
       } catch {
-        toast("Couldn't create trip.", "error");
+        toast(t("map.couldntCreateTrip"), "error");
         return null;
       }
     },
-    [toast]
+    [toast, t]
   );
 
   const renameTrip = useCallback(
     async (id: string, name: string): Promise<boolean> => {
       const snapshot = trips;
-      setTrips((t) => t.map((x) => (x.id === id ? { ...x, name } : x)));
+      setTrips((prev) => prev.map((x) => (x.id === id ? { ...x, name } : x)));
       try {
         const res = await fetch(`/api/trips/${id}`, {
           method: "PATCH",
@@ -328,36 +330,36 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
           body: JSON.stringify({ name }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        toast("Saved");
+        toast(t("common.saved"));
         return true;
       } catch {
         setTrips(snapshot);
-        toast("Couldn't rename trip.", "error");
+        toast(t("map.couldntRenameTrip"), "error");
         return false;
       }
     },
-    [trips, toast]
+    [trips, toast, t]
   );
 
   const deleteTrip = useCallback(
     async (id: string): Promise<boolean> => {
       const tripsSnap = trips;
       const visitsSnap = visits;
-      setTrips((t) => t.filter((x) => x.id !== id));
+      setTrips((prev) => prev.filter((x) => x.id !== id));
       setVisits((v) => (v ?? []).map((x) => (x.tripId === id ? { ...x, tripId: null } : x)));
       try {
         const res = await fetch(`/api/trips/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        toast("Trip deleted");
+        toast(t("map.tripDeleted"));
         return true;
       } catch {
         setTrips(tripsSnap);
         if (visitsSnap) setVisits(visitsSnap);
-        toast("Couldn't delete trip.", "error");
+        toast(t("map.couldntDeleteTrip"), "error");
         return false;
       }
     },
-    [trips, visits, toast]
+    [trips, visits, toast, t]
   );
 
   return (

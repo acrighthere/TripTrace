@@ -1,0 +1,46 @@
+// Strings for components/VisitForm.tsx. Keys are prefixed "visitForm.".
+// Save/Saving/Cancel/optional/City/Place are reused from common.* — not redefined here.
+export const visitForm = {
+  ru: {
+    "visitForm.statusLegend": "Статус",
+    "visitForm.statusVisited": "Посещено",
+    "visitForm.statusWishlist": "Хочу посетить",
+    "visitForm.typeLegend": "Тип метки",
+    "visitForm.typeHint":
+      "Предложено по уровню масштаба — при отдалённом виде клики создают города, при приближённом — места. Места привязываются к ближайшему городу в радиусе 50 км.",
+    "visitForm.nameLabel": "Название",
+    "visitForm.namePlaceholderCity": "напр. Лиссабон",
+    "visitForm.namePlaceholderPlace": "напр. Беленская башня",
+    "visitForm.dateFrom": "С",
+    "visitForm.dateVisitedOn": "Дата посещения",
+    "visitForm.dateTo": "По",
+    "visitForm.dateUntil": "До",
+    "visitForm.optionalShort": "(необяз.)",
+    "visitForm.notesLabel": "Заметки",
+    "visitForm.errorNameRequired": "Укажите название",
+    "visitForm.errorNameTooLong": "Название не длиннее 120 символов",
+    "visitForm.errorNotesTooLong": "Заметки не длиннее 2000 символов",
+    "visitForm.errorEndBeforeStart": "Дата окончания не может быть раньше даты начала",
+  },
+  en: {
+    "visitForm.statusLegend": "Status",
+    "visitForm.statusVisited": "Visited",
+    "visitForm.statusWishlist": "Want to go",
+    "visitForm.typeLegend": "Pin type",
+    "visitForm.typeHint":
+      "Suggested from your zoom level — zoomed-out clicks are cities, zoomed-in clicks are places. Places attach to your nearest city within 50 km.",
+    "visitForm.nameLabel": "Name",
+    "visitForm.namePlaceholderCity": "e.g. Lisbon",
+    "visitForm.namePlaceholderPlace": "e.g. Belém Tower",
+    "visitForm.dateFrom": "From",
+    "visitForm.dateVisitedOn": "Visited on",
+    "visitForm.dateTo": "To",
+    "visitForm.dateUntil": "Until",
+    "visitForm.optionalShort": "(opt.)",
+    "visitForm.notesLabel": "Notes",
+    "visitForm.errorNameRequired": "Name is required",
+    "visitForm.errorNameTooLong": "Name must be at most 120 characters",
+    "visitForm.errorNotesTooLong": "Notes must be at most 2000 characters",
+    "visitForm.errorEndBeforeStart": "End date can't be before the start date",
+  },
+};

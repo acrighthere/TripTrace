@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { VisitStatus, VisitType } from "@/types";
 import type { VisitFormValues } from "@/components/MapApp";
+import { useT } from "@/lib/i18n";
 
 interface VisitFormProps {
   mode: "create" | "edit";
@@ -17,6 +18,7 @@ const inputClass =
   "mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-sky-500 aria-[invalid=true]:border-red-400";
 
 export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCancel }: VisitFormProps) {
+  const t = useT();
   const [name, setName] = useState(initial.name);
   const [type, setType] = useState<VisitType>(initial.type);
   const [status, setStatus] = useState<VisitStatus>(initial.status);
@@ -33,11 +35,11 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
     if (pending) return;
 
     const nextErrors: { name?: string; notes?: string; visitedTo?: string } = {};
-    if (!name.trim()) nextErrors.name = "Name is required";
-    else if (name.trim().length > 120) nextErrors.name = "Name must be at most 120 characters";
-    if (notes.length > 2000) nextErrors.notes = "Notes must be at most 2000 characters";
+    if (!name.trim()) nextErrors.name = t("visitForm.errorNameRequired");
+    else if (name.trim().length > 120) nextErrors.name = t("visitForm.errorNameTooLong");
+    if (notes.length > 2000) nextErrors.notes = t("visitForm.errorNotesTooLong");
     if (visitedAt && visitedTo && visitedTo < visitedAt)
-      nextErrors.visitedTo = "End date can't be before the start date";
+      nextErrors.visitedTo = t("visitForm.errorEndBeforeStart");
     setErrors(nextErrors);
     if (nextErrors.name || nextErrors.notes || nextErrors.visitedTo) return;
 
@@ -58,12 +60,12 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
       {typeEditable && (
         <>
           <fieldset>
-            <legend className="text-sm font-medium">Status</legend>
+            <legend className="text-sm font-medium">{t("visitForm.statusLegend")}</legend>
             <div className="mt-1 flex gap-2" role="radiogroup">
               {(
                 [
-                  ["VISITED", "Visited"],
-                  ["WISHLIST", "Want to go"],
+                  ["VISITED", t("visitForm.statusVisited")],
+                  ["WISHLIST", t("visitForm.statusWishlist")],
                 ] as const
               ).map(([value, label]) => (
                 <label
@@ -89,13 +91,13 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium">Pin type</legend>
+            <legend className="text-sm font-medium">{t("visitForm.typeLegend")}</legend>
             <div className="mt-1 flex gap-2" role="radiogroup">
-              {(["CITY", "PLACE"] as const).map((t) => (
+              {(["CITY", "PLACE"] as const).map((pinType) => (
                 <label
-                  key={t}
+                  key={pinType}
                   className={`flex-1 cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-sky-500 ${
-                    type === t
+                    type === pinType
                       ? "border-sky-600 bg-sky-50 text-sky-700"
                       : "border-slate-300 text-slate-600 hover:border-slate-400"
                   }`}
@@ -103,26 +105,23 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
                   <input
                     type="radio"
                     name="visit-type"
-                    value={t}
-                    checked={type === t}
-                    onChange={() => setType(t)}
+                    value={pinType}
+                    checked={type === pinType}
+                    onChange={() => setType(pinType)}
                     className="sr-only"
                   />
-                  {t === "CITY" ? "City" : "Place"}
+                  {pinType === "CITY" ? t("common.city") : t("common.place")}
                 </label>
               ))}
             </div>
-            <p className="mt-1 text-xs text-slate-400">
-              Suggested from your zoom level — zoomed-out clicks are cities, zoomed-in clicks are
-              places. Places attach to your nearest city within 50 km.
-            </p>
+            <p className="mt-1 text-xs text-slate-400">{t("visitForm.typeHint")}</p>
           </fieldset>
         </>
       )}
 
       <div>
         <label htmlFor="visit-name" className="block text-sm font-medium">
-          Name
+          {t("visitForm.nameLabel")}
         </label>
         <input
           id="visit-name"
@@ -131,7 +130,11 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
           onChange={(e) => setName(e.target.value)}
           aria-invalid={!!errors.name}
           autoFocus
-          placeholder={type === "CITY" ? "e.g. Lisbon" : "e.g. Belém Tower"}
+          placeholder={
+            type === "CITY"
+              ? t("visitForm.namePlaceholderCity")
+              : t("visitForm.namePlaceholderPlace")
+          }
           className={inputClass}
         />
         {errors.name && (
@@ -144,8 +147,8 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
       <div className="flex gap-2">
         <div className="flex-1">
           <label htmlFor="visit-date" className="block text-sm font-medium">
-            {wishlist ? "From" : "Visited on"}{" "}
-            <span className="font-normal text-slate-400">(optional)</span>
+            {wishlist ? t("visitForm.dateFrom") : t("visitForm.dateVisitedOn")}{" "}
+            <span className="font-normal text-slate-400">{t("common.optional")}</span>
           </label>
           <input
             id="visit-date"
@@ -157,7 +160,8 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
         </div>
         <div className="flex-1">
           <label htmlFor="visit-date-to" className="block text-sm font-medium">
-            {wishlist ? "To" : "Until"} <span className="font-normal text-slate-400">(opt.)</span>
+            {wishlist ? t("visitForm.dateTo") : t("visitForm.dateUntil")}{" "}
+            <span className="font-normal text-slate-400">{t("visitForm.optionalShort")}</span>
           </label>
           <input
             id="visit-date-to"
@@ -178,7 +182,8 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
 
       <div>
         <label htmlFor="visit-notes" className="block text-sm font-medium">
-          Notes <span className="font-normal text-slate-400">(optional)</span>
+          {t("visitForm.notesLabel")}{" "}
+          <span className="font-normal text-slate-400">{t("common.optional")}</span>
         </label>
         <textarea
           id="visit-notes"
@@ -201,14 +206,14 @@ export default function VisitForm({ mode, initial, typeEditable, onSubmit, onCan
           disabled={pending}
           className="flex-1 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Save"}
+          {pending ? t("common.saving") : t("common.save")}
         </button>
         <button
           type="button"
           onClick={onCancel}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
         >
-          Cancel
+          {t("common.cancel")}
         </button>
       </div>
     </form>

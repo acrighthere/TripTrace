@@ -4,6 +4,8 @@ import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { useT } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 function safeCallbackUrl(raw: string | null): string {
   if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
@@ -11,6 +13,7 @@ function safeCallbackUrl(raw: string | null): string {
 }
 
 function LoginForm() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
@@ -24,7 +27,7 @@ function LoginForm() {
     e.preventDefault();
     if (pending) return;
     if (!email.trim() || !password) {
-      setError("Enter your email and password");
+      setError(t("auth.error.enterEmailPassword"));
       return;
     }
 
@@ -37,7 +40,7 @@ function LoginForm() {
     });
 
     if (res?.error) {
-      setError("Invalid email or password");
+      setError(t("auth.error.invalidCredentials"));
       setPending(false);
       return;
     }
@@ -48,14 +51,15 @@ function LoginForm() {
 
   return (
     <main className="flex min-h-dvh items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">TripTrace</h1>
-        <p className="mt-1 text-sm text-slate-500">Log in to see your map.</p>
+      <div className="relative w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <LanguageSwitcher className="absolute right-4 top-4" />
+        <h1 className="text-2xl font-semibold tracking-tight">{t("auth.brand")}</h1>
+        <p className="mt-1 text-sm text-slate-500">{t("auth.login.subtitle")}</p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
           <div>
             <label htmlFor="email" className="block text-sm font-medium">
-              Email
+              {t("auth.email")}
             </label>
             <input
               id="email"
@@ -68,7 +72,7 @@ function LoginForm() {
           </div>
           <div>
             <label htmlFor="password" className="block text-sm font-medium">
-              Password
+              {t("auth.password")}
             </label>
             <input
               id="password"
@@ -91,7 +95,7 @@ function LoginForm() {
             disabled={pending}
             className="w-full rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:opacity-60"
           >
-            {pending ? "Logging in…" : "Log in"}
+            {pending ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
 
           <p className="text-center text-sm">
@@ -99,15 +103,15 @@ function LoginForm() {
               href="/forgot"
               className="font-medium text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              Forgot password?
+              {t("auth.forgotPassword")}
             </Link>
           </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">
-          No account yet?{" "}
+          {t("auth.noAccount")}{" "}
           <Link href="/signup" className="font-medium text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500">
-            Sign up
+            {t("auth.signUp")}
           </Link>
         </p>
       </div>

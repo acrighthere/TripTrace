@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl, { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { DraftPin, TripDto, VisitDto, VisitType } from "@/types";
+import { useT } from "@/lib/i18n";
 
 /** Clicks below this zoom create cities; at or above it, places. */
 export const PLACE_MIN_ZOOM = 10;
@@ -160,6 +161,7 @@ export default function MapView({
   onSelectVisit,
   onMapClick,
 }: MapViewProps) {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
@@ -523,13 +525,13 @@ export default function MapView({
           aria-pressed={showAreas}
           className="absolute left-3 top-3 z-10 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow hover:bg-white focus-visible:ring-2 focus-visible:ring-sky-500 md:left-[25rem]"
         >
-          {showAreas ? "Hide visited countries" : "Show visited countries"}
+          {showAreas ? t("map.hideAreas") : t("map.showAreas")}
         </button>
       )}
 
       {loading && (
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-sm text-slate-600 shadow">
-          Loading your map…
+          {t("map.loading")}
         </div>
       )}
 
@@ -540,7 +542,7 @@ export default function MapView({
             onClick={onRetry}
             className="rounded bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       )}
@@ -548,7 +550,7 @@ export default function MapView({
       {showEmpty && (
         <div className="pointer-events-none absolute inset-x-0 top-16 flex justify-center px-4 md:top-6">
           <p className="rounded-xl bg-white/95 px-4 py-3 text-center text-sm text-slate-600 shadow">
-            No places pinned yet — click the map to add your first city
+            {t("map.empty")}
           </p>
         </div>
       )}

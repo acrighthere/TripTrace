@@ -3,8 +3,10 @@
 import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useT } from "@/lib/i18n";
 
 function ResetForm() {
+  const t = useT();
   const token = useSearchParams().get("token") ?? "";
 
   const [password, setPassword] = useState("");
@@ -19,8 +21,8 @@ function ResetForm() {
     if (pending) return;
 
     const next: { password?: string; confirm?: string } = {};
-    if (password.length < 8) next.password = "Password must be at least 8 characters";
-    if (confirm !== password) next.confirm = "Passwords don't match";
+    if (password.length < 8) next.password = t("auth.error.passwordTooShort");
+    if (confirm !== password) next.confirm = t("auth.error.passwordsDoNotMatch");
     setFieldError(next);
     setError(null);
     if (next.password || next.confirm) return;
@@ -37,7 +39,7 @@ function ResetForm() {
     } else {
       const data = await res.json().catch(() => null);
       if (data?.fields?.password) setFieldError({ password: data.fields.password });
-      else setError(data?.error ?? "Something went wrong. Try again.");
+      else setError(data?.error ?? t("common.tryAgain"));
       setPending(false);
     }
   }
@@ -45,33 +47,33 @@ function ResetForm() {
   return (
     <main className="flex min-h-dvh items-center justify-center p-4">
       <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold tracking-tight">Set a new password</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("auth.reset.title")}</h1>
 
         {done ? (
           <>
-            <p className="mt-3 text-sm text-slate-600">Your password has been updated.</p>
+            <p className="mt-3 text-sm text-slate-600">{t("auth.reset.done")}</p>
             <Link
               href="/login"
               className="mt-6 inline-block rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
             >
-              Log in
+              {t("auth.logIn")}
             </Link>
           </>
         ) : !token ? (
           <>
-            <p className="mt-3 text-sm text-red-700">This reset link is missing its token.</p>
+            <p className="mt-3 text-sm text-red-700">{t("auth.reset.missingToken")}</p>
             <Link
               href="/forgot"
               className="mt-6 inline-block text-sm font-medium text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              Request a new link
+              {t("auth.reset.requestNew")}
             </Link>
           </>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
             <div>
               <label htmlFor="password" className="block text-sm font-medium">
-                New password
+                {t("auth.newPassword")}
               </label>
               <input
                 id="password"
@@ -90,7 +92,7 @@ function ResetForm() {
             </div>
             <div>
               <label htmlFor="confirm" className="block text-sm font-medium">
-                Confirm password
+                {t("auth.confirmPassword")}
               </label>
               <input
                 id="confirm"
@@ -119,7 +121,7 @@ function ResetForm() {
               disabled={pending}
               className="w-full rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:opacity-60"
             >
-              {pending ? "Saving…" : "Update password"}
+              {pending ? t("auth.reset.submitting") : t("auth.reset.submit")}
             </button>
           </form>
         )}

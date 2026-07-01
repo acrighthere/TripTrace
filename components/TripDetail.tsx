@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { TripDto, VisitDto } from "@/types";
+import { useT, useLocale, formatNumber } from "@/lib/i18n";
 
 function visitOrder(a: VisitDto, b: VisitDto): number {
   const ka = a.visitedAt ?? a.createdAt;
@@ -39,6 +40,8 @@ export default function TripDetail({
   onRename,
   onDelete,
 }: TripDetailProps) {
+  const t = useT();
+  const locale = useLocale();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(trip.name);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -60,7 +63,7 @@ export default function TripDetail({
         onClick={onBack}
         className="text-sm text-slate-500 hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-sky-500"
       >
-        ← All trips
+        {t("tripDetail.back")}
       </button>
 
       {renaming ? (
@@ -76,7 +79,7 @@ export default function TripDetail({
             type="submit"
             className="rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
           >
-            Save
+            {t("common.save")}
           </button>
         </form>
       ) : (
@@ -96,29 +99,31 @@ export default function TripDetail({
             }}
             className="shrink-0 text-sm text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500"
           >
-            Rename
+            {t("tripDetail.rename")}
           </button>
         </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-slate-100 px-3 py-3">
-          <p className="text-xs text-slate-500">Stops</p>
+          <p className="text-xs text-slate-500">{t("tripDetail.stops")}</p>
           <p className="mt-0.5 text-2xl font-semibold tabular-nums">{ordered.length}</p>
         </div>
         <div className="rounded-xl bg-slate-100 px-3 py-3">
-          <p className="text-xs text-slate-500">Route distance</p>
+          <p className="text-xs text-slate-500">{t("tripDetail.routeDistance")}</p>
           <p className="mt-0.5 text-2xl font-semibold tabular-nums">
-            {km >= 1 ? `${Math.round(km).toLocaleString()} km` : "—"}
+            {km >= 1
+              ? t("tripDetail.km", { km: formatNumber(Math.round(km), locale) })
+              : t("tripDetail.noDistance")}
           </p>
         </div>
       </div>
 
       <section className="mt-5">
-        <h3 className="text-sm font-semibold text-slate-700">Stops, in order</h3>
+        <h3 className="text-sm font-semibold text-slate-700">{t("tripDetail.stopsInOrder")}</h3>
         {ordered.length === 0 ? (
           <p className="mt-2 text-sm text-slate-400">
-            No stops yet — open a visit and add it to this trip.
+            {t("tripDetail.empty")}
           </p>
         ) : (
           <ol className="mt-2 space-y-0.5">
@@ -133,7 +138,7 @@ export default function TripDetail({
                 </button>
                 <button
                   onClick={() => onRemoveStop(v.id)}
-                  aria-label={`Remove ${v.name} from trip`}
+                  aria-label={t("tripDetail.removeStop", { name: v.name })}
                   className="shrink-0 rounded-md px-1.5 py-1 text-xs text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-sky-500"
                 >
                   ✕
@@ -151,13 +156,13 @@ export default function TripDetail({
               onClick={onDelete}
               className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
             >
-              Delete trip (keeps pins)
+              {t("tripDetail.deleteKeepsPins")}
             </button>
             <button
               onClick={() => setConfirmingDelete(false)}
               className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-sky-500"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
           </div>
         ) : (
@@ -165,7 +170,7 @@ export default function TripDetail({
             onClick={() => setConfirmingDelete(true)}
             className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500"
           >
-            Delete trip
+            {t("tripDetail.delete")}
           </button>
         )}
       </div>
