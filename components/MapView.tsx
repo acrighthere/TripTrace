@@ -20,6 +20,8 @@ interface MapViewProps {
   styleUrl: string;
   visits: VisitDto[];
   trips: TripDto[];
+  /** ISO alpha-2 (lowercase) of visited countries — filled on the map. */
+  visitedCountries: string[];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -148,6 +150,7 @@ export default function MapView({
   styleUrl,
   visits,
   trips,
+  visitedCountries,
   loading,
   error,
   onRetry,
@@ -161,6 +164,7 @@ export default function MapView({
   const mapRef = useRef<MapLibreMap | null>(null);
   const draftMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [styleLoaded, setStyleLoaded] = useState(false);
+  const [showAreas, setShowAreas] = useState(true);
 
   // Latest props for the stable map event handlers.
   const visitsRef = useRef(visits);
@@ -201,9 +205,28 @@ export default function MapView({
         clusterRadius: 40,
       });
       map.addSource("selected", { type: "geojson", data: EMPTY_FC });
+      // Bundled world-country polygons (keyed by lowercase ISO alpha-2); the
+      // fill is filtered to the user's visited countries in a separate effect.
+      map.addSource("countries", { type: "geojson", data: "/countries.geo.json" });
       map.addSource("trips", {
         type: "geojson",
         data: toTripLines(visitsRef.current, tripsRef.current),
+      });
+
+      // Visited-country fill sits at the very bottom (just above the basemap).
+      map.addLayer({
+        id: "countries-fill",
+        type: "fill",
+        source: "countries",
+        filter: ["in", ["get", "code"], ["literal", []]],
+        paint: { "fill-color": CITY_COLOR, "fill-opacity": 0.15 },
+      });
+      map.addLayer({
+        id: "countries-outline",
+        type: "line",
+        source: "countries",
+        filter: ["in", ["get", "code"], ["literal", []]],
+        paint: { "line-color": CITY_COLOR, "line-width": 1, "line-opacity": 0.5 },
       });
 
       // Trip routes sit beneath every marker so pins stay clickable.
@@ -430,6 +453,19 @@ export default function MapView({
     (map.getSource("trips") as GeoJSONSource | undefined)?.setData(toTripLines(visits, trips));
   }, [visits, trips, styleLoaded]);
 
+  // Filter the country fill to visited countries and honor the show/hide toggle.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoaded) return;
+    const filter = ["in", ["get", "code"], ["literal", visitedCountries]] as never;
+    const vis = showAreas ? "visible" : "none";
+    for (const id of ["countries-fill", "countries-outline"]) {
+      if (!map.getLayer(id)) continue;
+      map.setFilter(id, filter);
+      map.setLayoutProperty(id, "visibility", vis);
+    }
+  }, [visitedCountries, showAreas, styleLoaded]);
+
   // Highlight ring under the selected visit.
   useEffect(() => {
     const map = mapRef.current;
@@ -480,6 +516,16 @@ export default function MapView({
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full" />
+
+      {visitedCountries.length > 0 && (
+        <button
+          onClick={() => setShowAreas((s) => !s)}
+          aria-pressed={showAreas}
+          className="absolute left-3 top-3 z-10 rounded-lg bg-white/95 px-3 py-1.5 text-xs font-medium text-slate-700 shadow hover:bg-white focus-visible:ring-2 focus-visible:ring-sky-500 md:left-[25rem]"
+        >
+          {showAreas ? "Hide visited countries" : "Show visited countries"}
+        </button>
+      )}
 
       {loading && (
         <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-white/95 px-4 py-2 text-sm text-slate-600 shadow">

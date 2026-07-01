@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DraftPin, TripDto, VisitDto, VisitStatus, VisitType } from "@/types";
 import MapView, { type FlyToTarget } from "@/components/MapView";
 import SidePanel from "@/components/SidePanel";
@@ -41,6 +41,16 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const [visits, setVisits] = useState<VisitDto[] | null>(null);
   const [trips, setTrips] = useState<TripDto[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // ISO codes of countries with at least one VISITED pin — drives the
+  // country fill on the map (full coverage: every city carries a country).
+  const visitedCountries = useMemo(() => {
+    const codes = new Set<string>();
+    for (const v of visits ?? []) {
+      if (v.status === "VISITED" && v.countryCode) codes.add(v.countryCode.toLowerCase());
+    }
+    return [...codes];
+  }, [visits]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPin | null>(null);
   const [flyTo, setFlyTo] = useState<FlyToTarget | null>(null);
@@ -356,6 +366,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         styleUrl={styleUrl}
         visits={visits ?? []}
         trips={trips}
+        visitedCountries={visitedCountries}
         loading={visits === null && !loadError}
         error={loadError}
         onRetry={load}
