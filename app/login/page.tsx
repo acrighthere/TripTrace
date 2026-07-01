@@ -93,6 +93,15 @@ function LoginForm() {
           >
             {pending ? "Logging in…" : "Log in"}
           </button>
+
+          <p className="text-center text-sm">
+            <Link
+              href="/forgot"
+              className="font-medium text-sky-600 hover:underline focus-visible:ring-2 focus-visible:ring-sky-500"
+            >
+              Forgot password?
+            </Link>
+          </p>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500">

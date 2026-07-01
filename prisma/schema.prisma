@@ -17,10 +17,23 @@ model User {
   image         String?
   createdAt     DateTime  @default(now())
 
-  accounts Account[]
-  sessions Session[]
-  visits   Visit[]
-  trips    Trip[]
+  accounts            Account[]
+  sessions            Session[]
+  visits              Visit[]
+  trips               Trip[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique // sha256 of the raw token sent by email
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Account {

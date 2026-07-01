@@ -34,6 +34,22 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+export const forgotPasswordSchema = z.object({
+  email: z
+    .string()
+    .min(1)
+    .max(254)
+    .transform((v) => v.toLowerCase()),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1).max(128),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be at most 128 characters"),
+});
+
 const notesField = z.preprocess(
   (v) => (v === "" ? null : v),
   z.string().trim().max(2000, "Notes must be at most 2000 characters").nullable()
