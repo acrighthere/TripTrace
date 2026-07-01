@@ -86,7 +86,8 @@ read-only/cancellable actions on it.
 `/api/photos` GET·POST · `/api/photos/presign` POST · `/api/photos/[id]` DELETE ·
 `/api/stats` GET · `/api/stats/backfill` POST ·
 `/api/trips` GET·POST · `/api/trips/[id]` PATCH·DELETE ·
-`/api/signup` POST · `/api/health` GET · `/api/auth/[...nextauth]`.
+`/api/signup` POST · `/api/health` GET · `/api/auth/[...nextauth]` ·
+**public** (no auth): `/api/password/forgot` POST · `/api/password/reset` POST.
 
 Client: [components/MapApp.tsx](components/MapApp.tsx) (state hub, optimistic
 updates) → [MapView.tsx](components/MapView.tsx) (MapLibre: clustered cities,
@@ -103,7 +104,11 @@ city by clicking its **basemap label** · **boundary-based** place→city
 attribution · **country/continent** persistence · **travel stats dashboard**
 (countries, % of world, continents, widest-span pair, per-country list with
 flags) · **date ranges** per visit · **wishlist** pins · **trips** (route
-lines + distance + assignment).
+lines + distance + assignment) · **visited-country choropleth** (country-level
+fill from a bundled `public/countries.geo.json`, filtered by the user's
+countryCodes, toggle-able on the map) · **password reset** (`/forgot` +
+`/reset`, single-use sha256-hashed 1h token, anti-enumeration; email via
+`SMTP_URL` or, unset, the link is logged — [lib/mailer.ts](lib/mailer.ts)).
 
 ## Deployment
 
@@ -141,10 +146,9 @@ lines + distance + assignment).
 ## Current state (update as it changes)
 
 - Original phased plan: `~/.claude/plans/encapsulated-percolating-lovelace.md`.
-- **Large uncommitted change set** in the working tree: country+stats,
-  date-ranges, wishlist, trips, and the prod/TLS deploy files. Nothing from
-  this work is committed yet (last commit `add5710` = boundary attribution).
-- Roadmap/backlog (≈22 items) lives in the auto-memory `triptrace-backlog`
-  entry. Next highest-leverage picks: country **choropleth fill** (boundary
-  data already stored) or **password reset** (no recovery flow exists today —
-  a real gap).
+- Working tree is **clean and pushed** to `origin/main` (through commit
+  `738c165`). Shipped this stretch: country+stats, date-ranges, wishlist,
+  trips, prod/TLS deploy, country choropleth, password reset.
+- Roadmap/backlog lives in the auto-memory `triptrace-backlog` entry. Next
+  highest-leverage picks now: **photo EXIF auto-pin**, **timeline view**, or
+  **i18n (Russian-first)**.
