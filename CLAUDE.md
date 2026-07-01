@@ -108,7 +108,10 @@ lines + distance + assignment) · **visited-country choropleth** (country-level
 fill from a bundled `public/countries.geo.json`, filtered by the user's
 countryCodes, toggle-able on the map) · **password reset** (`/forgot` +
 `/reset`, single-use sha256-hashed 1h token, anti-enumeration; email via
-`SMTP_URL` or, unset, the link is logged — [lib/mailer.ts](lib/mailer.ts)).
+`SMTP_URL` or, unset, the link is logged — [lib/mailer.ts](lib/mailer.ts)) ·
+**i18n** (Russian default + EN toggle; `useT()` over per-area tables in
+[lib/i18n/messages/](lib/i18n/messages), cookie-persisted, `<html lang>` from
+[lib/i18n-config.ts](lib/i18n-config.ts) server-side).
 
 ## Deployment
 
@@ -142,13 +145,19 @@ countryCodes, toggle-able on the map) · **password reset** (`/forgot` +
 - The image build needs ~2 GiB RAM; on a small VM add swap or prebuild + push.
 - After changing `schema.prisma`, run `npx prisma generate` AND restart any
   running dev server (cached Prisma client won't have new models/fields).
+- **i18n:** UI defaults to **Russian**. Any new user-visible string must be
+  added to a `lib/i18n/messages/<area>.ts` table (ru + en) and rendered via
+  `useT()` — don't hardcode. Pure config (`normalizeLocale`, `Locale`,
+  `LOCALE_COOKIE`) lives in `lib/i18n-config.ts` (server-safe); the provider
+  and hooks are in the `"use client"` `lib/i18n.tsx` — never call a client-module
+  function from a server component.
 
 ## Current state (update as it changes)
 
 - Original phased plan: `~/.claude/plans/encapsulated-percolating-lovelace.md`.
 - Working tree is **clean and pushed** to `origin/main` (through commit
-  `738c165`). Shipped this stretch: country+stats, date-ranges, wishlist,
-  trips, prod/TLS deploy, country choropleth, password reset.
+  `c6d6dc3`). Shipped this stretch: country+stats, date-ranges, wishlist,
+  trips, prod/TLS deploy, country choropleth, password reset, i18n.
 - Roadmap/backlog lives in the auto-memory `triptrace-backlog` entry. Next
   highest-leverage picks now: **photo EXIF auto-pin**, **timeline view**, or
-  **i18n (Russian-first)**.
+  **tags + ratings with filter**.
