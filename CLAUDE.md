@@ -86,6 +86,7 @@ read-only/cancellable actions on it.
 `/api/photos` GET·POST · `/api/photos/presign` POST · `/api/photos/[id]` DELETE ·
 `/api/stats` GET · `/api/stats/backfill` POST ·
 `/api/trips` GET·POST · `/api/trips/[id]` PATCH·DELETE ·
+`/api/nearby` GET (Wikipedia GeoSearch suggestions, per-user rate limit + TTL cache) ·
 `/api/signup` POST · `/api/health` GET · `/api/auth/[...nextauth]` ·
 **public** (no auth): `/api/password/forgot` POST · `/api/password/reset` POST.
 
@@ -111,7 +112,11 @@ countryCodes, toggle-able on the map) · **password reset** (`/forgot` +
 `SMTP_URL` or, unset, the link is logged — [lib/mailer.ts](lib/mailer.ts)) ·
 **i18n** (Russian default + EN toggle; `useT()` over per-area tables in
 [lib/i18n/messages/](lib/i18n/messages), cookie-persisted, `<html lang>` from
-[lib/i18n-config.ts](lib/i18n-config.ts) server-side).
+[lib/i18n-config.ts](lib/i18n-config.ts) server-side) · **nearby places**
+(spec.md: map click → ≤15 Wikipedia-notable places within 10 km with photo
+cards; one-tap "mark visited" or "add photo→auto-visit"; already-pinned
+places filtered out; gray suggestion markers while the draft is open —
+[lib/nearby.ts](lib/nearby.ts), [components/NearbyPlaces.tsx](components/NearbyPlaces.tsx)).
 
 ## Deployment
 
@@ -154,10 +159,13 @@ countryCodes, toggle-able on the map) · **password reset** (`/forgot` +
 
 ## Current state (update as it changes)
 
-- Original phased plan: `~/.claude/plans/encapsulated-percolating-lovelace.md`.
 - Working tree is **clean and pushed** to `origin/main` (through commit
-  `c6d6dc3`). Shipped this stretch: country+stats, date-ranges, wishlist,
-  trips, prod/TLS deploy, country choropleth, password reset, i18n.
+  `5b5b6dd`). Shipped this stretch: country+stats, date-ranges, wishlist,
+  trips, prod/TLS deploy, country choropleth, password reset, i18n,
+  nearby-places discovery (spec.md).
+- Watch out: an AWS SDK refresh once broke presigned PUTs via default CRC32
+  checksums — fixed with `requestChecksumCalculation: "WHEN_REQUIRED"` in
+  [lib/storage.ts](lib/storage.ts); don't remove it when touching S3 clients.
 - Roadmap/backlog lives in the auto-memory `triptrace-backlog` entry. Next
   highest-leverage picks now: **photo EXIF auto-pin**, **timeline view**, or
   **tags + ratings with filter**.
