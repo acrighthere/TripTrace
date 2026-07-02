@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DraftPin, TripDto, VisitDto, VisitStatus, VisitType } from "@/types";
+import type { DraftPin, NearbyPlaceDto, TripDto, VisitDto, VisitStatus, VisitType } from "@/types";
 import MapView, { type FlyToTarget } from "@/components/MapView";
 import SidePanel from "@/components/SidePanel";
 import { ToastProvider, useToast } from "@/components/Toast";
-import { useT } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 
 export interface VisitFormValues {
   name: string;
@@ -39,9 +39,13 @@ function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): num
 function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
   const toast = useToast();
   const t = useT();
+  const locale = useLocale();
 
   const [visits, setVisits] = useState<VisitDto[] | null>(null);
   const [trips, setTrips] = useState<TripDto[]>([]);
+  const [nearby, setNearby] = useState<NearbyPlaceDto[] | null>(null);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const nearbySeq = useRef(0);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // ISO codes of countries with at least one VISITED pin — drives the
@@ -95,6 +99,43 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
     [visits, requestFly]
   );
 
+  // "Interesting places nearby" for the clicked point (spec.md). A sequence
+  // counter drops stale responses when the user clicks around quickly.
+  const fetchNearby = useCallback(
+    async (lat: number, lng: number) => {
+      const seq = ++nearbySeq.current;
+      setNearby(null);
+      setNearbyLoading(true);
+      try {
+        const res = await fetch(`/api/nearby?lat=${lat}&lng=${lng}&lang=${locale}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = (await res.json()) as { places: NearbyPlaceDto[] };
+        if (seq === nearbySeq.current) setNearby(data.places);
+      } catch {
+        if (seq === nearbySeq.current) setNearby([]);
+      } finally {
+        if (seq === nearbySeq.current) setNearbyLoading(false);
+      }
+    },
+    [locale]
+  );
+
+  // Suggestions minus anything already pinned (same name within ~300 m) —
+  // already-visited places must never reappear in the list, and a quick-added
+  // item drops out automatically via the optimistic visits update.
+  const visibleNearby = useMemo(() => {
+    if (!nearby) return null;
+    const existing = visits ?? [];
+    return nearby.filter(
+      (p) =>
+        !existing.some(
+          (v) =>
+            v.name.trim().toLowerCase() === p.title.trim().toLowerCase() &&
+            distanceKm(v.lat, v.lng, p.lat, p.lng) < 0.3
+        )
+    );
+  }, [nearby, visits]);
+
   const handleMapClick = useCallback(
     (pin: DraftPin) => {
       // Clicking a basemap label that's already pinned selects the existing
@@ -116,17 +157,27 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
       }
       setSelectedId(null);
       setDraft(pin);
+      void fetchNearby(pin.lat, pin.lng);
     },
-    [visits, toast, t]
+    [visits, toast, t, fetchNearby]
   );
 
   const closePanels = useCallback(() => {
     setSelectedId(null);
     setDraft(null);
+    setNearby(null);
+    setNearbyLoading(false);
+    nearbySeq.current++;
   }, []);
 
   const createVisit = useCallback(
-    async (pin: DraftPin, values: VisitFormValues): Promise<boolean> => {
+    async (
+      pin: DraftPin,
+      values: VisitFormValues,
+      // keepPanel: quick-add from the nearby list — stay on the draft panel
+      // instead of closing it and jumping to the new visit.
+      opts: { keepPanel?: boolean } = {}
+    ): Promise<VisitDto | null> => {
       const tempId = `temp-${++tempSeq.current}`;
       const optimistic: VisitDto = {
         id: tempId,
@@ -148,7 +199,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         placeCount: 0,
       };
       setVisits((v) => [...(v ?? []), optimistic]);
-      setDraft(null);
+      if (!opts.keepPanel) setDraft(null);
 
       try {
         const res = await fetch("/api/visits", {
@@ -168,7 +219,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as { visit: VisitDto; adoptedPlaces?: number };
         setVisits((v) => (v ?? []).map((x) => (x.id === tempId ? data.visit : x)));
-        setSelectedId(data.visit.id);
+        if (!opts.keepPanel) setSelectedId(data.visit.id);
         // Attachment must never happen silently — say how many places moved,
         // and resync since other visits' parent links changed server-side.
         const adopted = data.adoptedPlaces ?? 0;
@@ -178,15 +229,33 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         } else {
           toast(t("common.saved"));
         }
-        return true;
+        return data.visit;
       } catch {
         setVisits((v) => (v ?? []).filter((x) => x.id !== tempId));
-        setDraft(pin);
+        if (!opts.keepPanel) setDraft(pin);
         toast(t("common.tryAgain"), "error");
-        return false;
+        return null;
       }
     },
     [toast, load, t]
+  );
+
+  /** One-click add from the nearby list: PLACE/VISITED at the place's coords. */
+  const quickAddNearby = useCallback(
+    (place: NearbyPlaceDto): Promise<VisitDto | null> =>
+      createVisit(
+        { lat: place.lat, lng: place.lng, suggestedType: "PLACE" },
+        {
+          name: place.title,
+          type: "PLACE",
+          status: "VISITED",
+          notes: "",
+          visitedAt: "",
+          visitedTo: "",
+        },
+        { keepPanel: true }
+      ),
+    [createVisit]
   );
 
   const updateVisit = useCallback(
@@ -369,6 +438,7 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         visits={visits ?? []}
         trips={trips}
         visitedCountries={visitedCountries}
+        nearbyPlaces={draft ? visibleNearby ?? [] : []}
         loading={visits === null && !loadError}
         error={loadError}
         onRetry={load}
@@ -382,6 +452,9 @@ function MapAppInner({ styleUrl, userEmail }: MapAppProps) {
         userEmail={userEmail}
         visits={visits ?? []}
         trips={trips}
+        nearby={visibleNearby}
+        nearbyLoading={nearbyLoading}
+        onQuickAddNearby={quickAddNearby}
         loading={visits === null && !loadError}
         selectedId={selectedId}
         draft={draft}

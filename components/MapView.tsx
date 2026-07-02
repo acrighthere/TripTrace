@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl, { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { DraftPin, TripDto, VisitDto, VisitType } from "@/types";
+import type { DraftPin, NearbyPlaceDto, TripDto, VisitDto, VisitType } from "@/types";
 import { useT } from "@/lib/i18n";
 
 /** Clicks below this zoom create cities; at or above it, places. */
@@ -23,6 +23,8 @@ interface MapViewProps {
   trips: TripDto[];
   /** ISO alpha-2 (lowercase) of visited countries — filled on the map. */
   visitedCountries: string[];
+  /** Nearby-place suggestions shown as gray markers while the draft is open. */
+  nearbyPlaces: NearbyPlaceDto[];
   loading: boolean;
   error: string | null;
   onRetry: () => void;
@@ -82,6 +84,17 @@ function toTripLines(visits: VisitDto[], trips: TripDto[]): GeoJSON.FeatureColle
     });
   }
   return { type: "FeatureCollection", features };
+}
+
+function toNearbyFC(places: NearbyPlaceDto[]): GeoJSON.FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: places.map((p) => ({
+      type: "Feature" as const,
+      geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
+      properties: { name: p.title },
+    })),
+  };
 }
 
 const INTERACTIVE_LAYERS = [
@@ -152,6 +165,7 @@ export default function MapView({
   visits,
   trips,
   visitedCountries,
+  nearbyPlaces,
   loading,
   error,
   onRetry,
@@ -173,6 +187,8 @@ export default function MapView({
   visitsRef.current = visits;
   const tripsRef = useRef(trips);
   tripsRef.current = trips;
+  const nearbyRef = useRef(nearbyPlaces);
+  nearbyRef.current = nearbyPlaces;
   const onSelectRef = useRef(onSelectVisit);
   onSelectRef.current = onSelectVisit;
   const onMapClickRef = useRef(onMapClick);
@@ -242,6 +258,40 @@ export default function MapView({
           "line-width": 2.5,
           "line-opacity": 0.75,
           "line-dasharray": [2, 1.5],
+        },
+      });
+
+      // Nearby-place suggestions: quiet gray hollow markers with labels,
+      // visible only while the add-visit draft is open. Not clickable.
+      map.addSource("nearby", { type: "geojson", data: toNearbyFC(nearbyRef.current) });
+      map.addLayer({
+        id: "nearby-point",
+        type: "circle",
+        source: "nearby",
+        paint: {
+          "circle-radius": 5.5,
+          "circle-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#64748b",
+          "circle-opacity": 0.9,
+        },
+      });
+      map.addLayer({
+        id: "nearby-label",
+        type: "symbol",
+        source: "nearby",
+        layout: {
+          "text-field": ["get", "name"],
+          "text-size": 10.5,
+          "text-font": TEXT_FONT,
+          "text-offset": [0, 1.0],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        paint: {
+          "text-color": "#475569",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1,
         },
       });
 
@@ -454,6 +504,13 @@ export default function MapView({
     );
     (map.getSource("trips") as GeoJSONSource | undefined)?.setData(toTripLines(visits, trips));
   }, [visits, trips, styleLoaded]);
+
+  // Nearby-suggestion markers (empty array clears them).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !styleLoaded) return;
+    (map.getSource("nearby") as GeoJSONSource | undefined)?.setData(toNearbyFC(nearbyPlaces));
+  }, [nearbyPlaces, styleLoaded]);
 
   // Filter the country fill to visited countries and honor the show/hide toggle.
   useEffect(() => {

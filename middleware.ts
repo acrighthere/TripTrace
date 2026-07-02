@@ -25,5 +25,6 @@ export const config = {
     "/api/photos/:path*",
     "/api/stats/:path*",
     "/api/trips/:path*",
+    "/api/nearby/:path*",
   ],
 };

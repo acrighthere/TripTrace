@@ -10,10 +10,11 @@ import { visitForm } from "./visitForm";
 import { statsPanel } from "./statsPanel";
 import { tripDetail } from "./tripDetail";
 import { photoSection } from "./photoSection";
+import { nearby } from "./nearby";
 
 type Table = Record<string, string>;
 
-const TABLES = [common, auth, map, sidePanel, visitForm, statsPanel, tripDetail, photoSection];
+const TABLES = [common, auth, map, sidePanel, visitForm, statsPanel, tripDetail, photoSection, nearby];
 
 function merge(locale: Locale): Table {
   return Object.assign({}, ...TABLES.map((t) => t[locale]));

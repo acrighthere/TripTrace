@@ -43,6 +43,20 @@ export interface PhotoDto {
   url: string;
 }
 
+/** An "interesting place nearby" suggestion (Wikipedia geosearch). */
+export interface NearbyPlaceDto {
+  title: string;
+  description: string | null;
+  lat: number;
+  lng: number;
+  /** Wikipedia article thumbnail, if the article has one */
+  thumbUrl: string | null;
+  /** Distance from the clicked point, meters */
+  distanceM: number;
+  /** Link to the Wikipedia article */
+  url: string;
+}
+
 /** Payload the map produces when the user clicks an empty spot or a basemap label. */
 export interface DraftPin {
   lat: number;

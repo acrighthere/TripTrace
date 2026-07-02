@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { signOut } from "next-auth/react";
-import type { DraftPin, TripDto, VisitDto, VisitStatus } from "@/types";
+import type { DraftPin, NearbyPlaceDto, TripDto, VisitDto, VisitStatus } from "@/types";
 import VisitForm from "@/components/VisitForm";
 import PhotoSection from "@/components/PhotoSection";
 import StatsPanel from "@/components/StatsPanel";
 import TripDetail from "@/components/TripDetail";
+import NearbyPlaces from "@/components/NearbyPlaces";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useT, useLocale, formatDateRange } from "@/lib/i18n";
 import type { VisitEditValues, VisitFormValues } from "@/components/MapApp";
@@ -15,12 +16,15 @@ interface SidePanelProps {
   userEmail: string;
   visits: VisitDto[];
   trips: TripDto[];
+  nearby: NearbyPlaceDto[] | null;
+  nearbyLoading: boolean;
+  onQuickAddNearby: (place: NearbyPlaceDto) => Promise<VisitDto | null>;
   loading: boolean;
   selectedId: string | null;
   draft: DraftPin | null;
   onSelect: (id: string) => void;
   onClose: () => void;
-  onCreate: (pin: DraftPin, values: VisitFormValues) => Promise<boolean>;
+  onCreate: (pin: DraftPin, values: VisitFormValues) => Promise<VisitDto | null>;
   onUpdate: (id: string, values: VisitEditValues) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
   onSetStatus: (id: string, status: VisitStatus) => void;
@@ -48,6 +52,9 @@ export default function SidePanel({
   userEmail,
   visits,
   trips,
+  nearby,
+  nearbyLoading,
+  onQuickAddNearby,
   loading,
   selectedId,
   draft,
@@ -207,10 +214,16 @@ export default function SidePanel({
               visitedAt: "",
               visitedTo: "",
             }}
-            onSubmit={(values) => onCreate(draft, values)}
+            onSubmit={async (values) => !!(await onCreate(draft, values))}
             onCancel={onClose}
           />
         </div>
+        <NearbyPlaces
+          places={nearby}
+          loading={nearbyLoading}
+          onAdd={onQuickAddNearby}
+          onPhotoCountChange={onPhotoCountChange}
+        />
       </div>
     );
   } else if (selected) {
