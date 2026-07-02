@@ -20,11 +20,18 @@ const credentials = {
 // against the endpoint the *browser* reaches (localhost:9000 in compose,
 // while the server itself talks to minio:9000). With real S3/R2 both
 // endpoints are the same. forcePathStyle is required for MinIO.
+//
+// requestChecksumCalculation: newer SDKs (>=3.729) default to embedding a
+// CRC32 checksum into presigned PUT signatures — computed over an EMPTY body
+// at signing time, so the browser's actual upload always fails with 403.
+// WHEN_REQUIRED restores the classic behavior.
 const internalClient = new S3Client({
   region,
   credentials,
   endpoint: process.env.S3_ENDPOINT,
   forcePathStyle: true,
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 const presignClient = new S3Client({
@@ -32,6 +39,8 @@ const presignClient = new S3Client({
   credentials,
   endpoint: process.env.S3_PUBLIC_ENDPOINT ?? process.env.S3_ENDPOINT,
   forcePathStyle: true,
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 /**
